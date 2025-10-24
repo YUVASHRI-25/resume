@@ -1,3 +1,14 @@
+"""
+Beautiful Modern Resume Insight Dashboard (Soft Pastel Rainbow Edition)
+-- WITH:
+ - Numbered AI Assistant responses (1., 2., 3., ...)
+ - Clean pastel AI chat cards
+ - Topic-colored AI cards (Skills, ATS, Experience, Keywords)
+ - Properly aligned, rounded Suggested Keyword chips
+ - Matched Pro Tip pastel box
+"""
+
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -29,84 +40,236 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 
+# ...existing code...
+# Load environment variables from .env file
 load_dotenv('.env', override=True)
+# Also try loading from 'env' file if it exists
+load_dotenv('env', override=True)
 
-# Insert RAG + helper imports / class here
+# Insert RAG + helper imports / class here using LangChain
 import os
 import numpy as np
+
+# LangChain imports
 try:
-    import faiss
-except Exception:
-    faiss = None
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+    from langchain_community.vectorstores import FAISS
+    from langchain_classic.chains import RetrievalQA
+    from langchain_core.prompts import PromptTemplate
+    from langchain_core.documents import Document
+    LANGCHAIN_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ LangChain import error: {e}")
+    LANGCHAIN_AVAILABLE = False
 
-class RAGClient:
-
+class LangChainRAGClient:
+    """
+    LangChain-based RAG system:
+    - LangChain controls the pipeline
+    - FAISS for vector storage and retrieval
+    - OpenAI for embeddings and generation
+    """
     def __init__(self, openai_api_key=None, emb_model="text-embedding-3-small", llm_model="gpt-4o-mini"):
-        # use OpenAI client already imported in file
-        self.client = OpenAI(api_key=openai_api_key or os.getenv("OPENAI_API_KEY"))
+        if not LANGCHAIN_AVAILABLE:
+            raise RuntimeError("LangChain not available. Install: pip install langchain langchain-openai langchain-community")
+        
+        self.api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            raise RuntimeError("OpenAI API key not found")
+        
         self.emb_model = emb_model
         self.llm_model = llm_model
-        self.index = None
-        self.meta = []  # stores original chunk texts in same order as index
-
-    def _embed(self, texts):
-        # returns list of vectors
-        resp = self.client.embeddings.create(model=self.emb_model, input=texts)
-        return [d["embedding"] for d in resp["data"]]
-
-    def build_index(self, chunks):
-        if faiss is None:
-            raise RuntimeError("faiss not installed: pip install faiss-cpu")
-        vecs = self._embed(chunks)
-        arr = np.array(vecs, dtype="float32")
-        dim = arr.shape[1]
-        self.index = faiss.IndexFlatL2(dim)
-        self.index.add(arr)
-        self.meta = chunks.copy()
-
-    def retrieve(self, query, k=3):
-        if self.index is None:
-            return []
-        qv = np.array(self._embed([query]), dtype="float32")
-        D, I = self.index.search(qv, k)
-        results = []
-        for idx in I[0]:
-            if idx < len(self.meta):
-                results.append(self.meta[idx])
-        return results
-
-    def query(self, user_query, k=3, prompt_template=None):
-        context_chunks = self.retrieve(user_query, k=k)
-        context = "\n\n---\n\n".join(context_chunks) if context_chunks else ""
-        prompt = (prompt_template or "Use the context to answer the question. Context:\n{context}\n\nQuestion: {q}")\
-                 .format(context=context, q=user_query)
+        self.vectorstore = None
+        self.qa_chain = None
         
+        # Initialize embeddings
         try:
-            response = self.client.chat.completions.create(
-                model=self.llm_model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert resume consultant. Use the provided context to give specific, actionable advice."
-                    },
-                    {
-                        "role": "user", 
-                        "content": prompt
-                    }
-                ],
-                max_tokens=512,
-                temperature=0.7
+            self.embeddings = OpenAIEmbeddings(
+                model=emb_model,
+                openai_api_key=self.api_key
+            )
+        except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg.lower():
+                raise RuntimeError("OpenAI quota exceeded. Please add credits to your account at https://platform.openai.com/settings/organization/billing")
+            elif "401" in error_msg:
+                raise RuntimeError("Invalid OpenAI API key. Please check your env file.")
+            else:
+                raise RuntimeError(f"OpenAI API error: {error_msg}")
+        
+        # Initialize LLM
+        self.llm = ChatOpenAI(
+            model=llm_model,
+            temperature=0.3,
+            max_tokens=1000,
+            openai_api_key=self.api_key
+        )
+        
+        print(f"✅ LangChain RAG initialized with {llm_model}")
+
+    def build_index(self, text: str):
+        """
+        Build FAISS index from resume text using LangChain
+        Args:
+            text: Full resume text
+        """
+        try:
+            # Use LangChain's RecursiveCharacterTextSplitter for better chunking
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=500,  # Characters per chunk
+                chunk_overlap=100,  # Overlap between chunks for context
+                length_function=len,
+                separators=["\n\n", "\n", ". ", " ", ""]  # Try these separators in order
             )
             
-            if response and response.choices:
-                return response.choices[0].message.content.strip()
-            else:
-                return "Sorry, I couldn't generate a response."
-                
-        except Exception as e:
-            print(f"❌ RAG query error: {e}")
-            return f"Error generating response: {str(e)}"
+            # Split text into chunks
+            chunks = text_splitter.split_text(text)
+            
+            if not chunks:
+                raise ValueError("No text chunks created from resume")
+            
+            # Create Document objects for LangChain
+            documents = [Document(page_content=chunk) for chunk in chunks]
+            
+            # Create FAISS vector store with LangChain
+            self.vectorstore = FAISS.from_documents(
+                documents=documents,
+                embedding=self.embeddings
+            )
+            
+            # Create custom prompt template for resume analysis
+            prompt_template = """You are an expert resume analyst. Use the following resume content to answer the question accurately and specifically.
 
+Resume Content:
+{context}
+
+Question: {question}
+
+Instructions:
+- Answer ONLY based on the information in the resume content provided above
+- Be specific and cite exact details from the resume
+- If the information is not in the resume, clearly state "This information is not mentioned in the resume"
+- Format your response clearly with proper numbering if listing multiple items
+- For projects, include: name, description, and technologies
+- For certifications, include: name and year (if mentioned)
+- For work experience, include: position, company, duration, and key responsibilities
+
+Answer:"""
+
+            PROMPT = PromptTemplate(
+                template=prompt_template,
+                input_variables=["context", "question"]
+            )
+            
+            # Create RetrievalQA chain with LangChain
+            self.qa_chain = RetrievalQA.from_chain_type(
+                llm=self.llm,
+                chain_type="stuff",  # Stuff all retrieved docs into prompt
+                retriever=self.vectorstore.as_retriever(
+                    search_type="similarity",
+                    search_kwargs={"k": 5}  # Retrieve top 5 most relevant chunks
+                ),
+                return_source_documents=True,
+                chain_type_kwargs={"prompt": PROMPT}
+            )
+            
+            print(f"✅ LangChain RAG index built with {len(chunks)} chunks")
+            return True
+            
+        except Exception as e:
+            error_msg = str(e)
+            print(f"❌ Error building LangChain index: {e}")
+            if "429" in error_msg or "quota" in error_msg.lower():
+                raise RuntimeError("OpenAI quota exceeded. Please add credits to your account at https://platform.openai.com/settings/organization/billing")
+            elif "401" in error_msg:
+                raise RuntimeError("Invalid OpenAI API key. Please check your env file.")
+            else:
+                raise RuntimeError(f"Error building index: {error_msg}")
+
+    def query(self, user_query: str, k=5):
+        """
+        Query the resume using LangChain RAG pipeline
+        Args:
+            user_query: Question to ask about the resume
+            k: Number of chunks to retrieve (default: 5)
+        Returns:
+            Answer from the LLM based on retrieved context
+        """
+        if self.qa_chain is None:
+            return "❌ RAG system not initialized. Please upload a resume first."
+        
+        try:
+            # Query using LangChain's RetrievalQA chain
+            result = self.qa_chain.invoke({"query": user_query})
+            
+            answer = result.get("result", "").strip()
+            
+            # Add source information for transparency
+            if result.get("source_documents"):
+                num_sources = len(result["source_documents"])
+                answer += f"\n\n_[Based on {num_sources} relevant sections from the resume]_"
+            
+            return answer
+            
+        except Exception as e:
+            error_message = str(e)
+            print(f"❌ LangChain query error: {e}")
+            
+            # Handle specific OpenAI errors with helpful messages
+            if "429" in error_message or "quota" in error_message.lower():
+                return """🚫 OpenAI API Quota Exceeded
+
+Your OpenAI API key has run out of credits. Here's how to fix this:
+
+1. **Check Your Usage**: Visit https://platform.openai.com/usage
+2. **Add Credits**: Go to https://platform.openai.com/settings/organization/billing
+3. **Set Up Billing**: Add a payment method and purchase credits ($10 recommended)
+
+The RAG system requires credits to:
+- Create embeddings (very cheap)
+- Generate answers (affordable with GPT-4o-mini)
+
+Total cost per resume: ~$0.02-0.05"""
+            
+            elif "401" in error_message or "authentication" in error_message.lower():
+                return """🔑 Authentication Error
+
+Your OpenAI API key is invalid or expired. Please:
+1. Get a valid key from https://platform.openai.com/api-keys
+2. Update your 'env' file: OPENAI_API_KEY=sk-proj-...
+3. Restart the application"""
+            
+            elif "rate_limit" in error_message.lower():
+                return """⏱️ Rate Limit Exceeded
+
+You're making too many requests. Please:
+1. Wait 60 seconds and try again
+2. Consider upgrading your OpenAI plan for higher limits"""
+            
+            else:
+                return f"""❌ Error generating response
+
+Error details: {error_message}
+
+Please try:
+1. Rephrasing your question
+2. Checking your internet connection
+3. Verifying your OpenAI API key has credits"""
+    
+    def retrieve_context(self, query: str, k=5):
+        """Retrieve relevant chunks without generating answer (for debugging)"""
+        if self.vectorstore is None:
+            return []
+        
+        try:
+            docs = self.vectorstore.similarity_search(query, k=k)
+            return [doc.page_content for doc in docs]
+        except Exception as e:
+            print(f"❌ Retrieval error: {e}")
+            return []
+    # ...existing code...
+# ...existing code...
 class AIAssistant:
     """Light wrapper for OpenAI Chat Completions API (graceful if no API key)."""
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
@@ -798,7 +961,9 @@ class JobDescriptionAnalyzer:
             return None
 
 
-
+# ---------------------------
+# Resume Analyzer (unchanged logic)
+# ---------------------------
 class ResumeAnalyzer:
     def __init__(self):
         self.stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
@@ -825,6 +990,16 @@ class ResumeAnalyzer:
 
         # Initialize AI assistant for on-demand responses
         self.ai_assistant = AIAssistant()
+        
+        # Initialize LangChain RAG client for resume question answering
+        try:
+            self.rag_client = LangChainRAGClient(openai_api_key=os.getenv("OPENAI_API_KEY"))
+            self.rag_enabled = True
+            print("✅ LangChain RAG client initialized successfully")
+        except Exception as e:
+            print(f"⚠️ LangChain RAG client initialization failed: {e}")
+            self.rag_client = None
+            self.rag_enabled = False
 # ...existing code...
 
     def extract_text_from_pdf(self, file):
@@ -861,6 +1036,39 @@ class ResumeAnalyzer:
             return str(file.read(), "utf-8")
         except:
             return "Error extracting TXT text"
+
+    def build_resume_rag_index(self, text: str):
+        """
+        Builds a LangChain RAG index from resume text for question answering.
+        LangChain handles chunking, embedding, and FAISS indexing automatically.
+        
+        Args:
+            text: The full resume text
+        Returns:
+            tuple: (success: bool, error_message: str or None)
+        """
+        if not self.rag_enabled or not self.rag_client:
+            print("⚠️ LangChain RAG not enabled, skipping index building")
+            return False, "LangChain RAG client not initialized"
+        
+        try:
+            # LangChain handles all the chunking and indexing
+            self.rag_client.build_index(text)
+            print("✅ LangChain RAG index built successfully")
+            return True, None
+                
+        except RuntimeError as e:
+            error_msg = str(e)
+            print(f"❌ Error building LangChain RAG index: {e}")
+            if "quota exceeded" in error_msg.lower():
+                return False, "quota_exceeded"
+            elif "Invalid" in error_msg or "401" in error_msg:
+                return False, "invalid_key"
+            else:
+                return False, error_msg
+        except Exception as e:
+            print(f"❌ Error building LangChain RAG index: {e}")
+            return False, str(e)
 
 # ...existing code...
     def extract_contact_info(self, text: str) -> Dict[str, Any]:
@@ -960,23 +1168,46 @@ class ResumeAnalyzer:
 
 # ...existing code...
     # ...existing code...
-    def extract_skills(self, text):
+    def extract_skills_from_sections_only(self, text, sections=None):
         """
-        High-precision skill extraction:
-        - PhraseMatcher matches (high precision for multi-word / normal tokens)
-        - Exact token matching for short/special tokens (C, R, Go, SQL, etc.)
-        - Whole-word regex for skills that include punctuation (C++, C#, node.js)
-        - Compact-text fallback only for multi-word skills (longer than threshold)
-        - Normalize and dedupe while preserving discovery order
-        Returns: (technical_list, soft_list)
+        Extract skills ONLY from dedicated 'Skills', 'Technical Skills', or 'Soft Skills' sections.
+        Does not extract from project descriptions, experience, or summary sections.
+        Returns: (technical_skills, soft_skills) as comma-separated strings
         """
         import re
 
         if not text:
-            return [], []
+            return "", ""
 
-        doc = self.nlp(text)
-        text_lower = text.lower()
+        # Get sections if not provided
+        if sections is None:
+            sections = self.extract_sections(text)
+
+        # Look for skills sections with various naming patterns
+        skills_sections = []
+        
+        # Check for different section names
+        section_patterns = {
+            'skills': r'(skills|technical skills|soft skills|competencies|expertise|abilities|technologies)',
+            'technical_skills': r'(technical skills|technical competencies|programming|languages|tools|frameworks)',
+            'soft_skills': r'(soft skills|interpersonal skills|leadership skills|communication skills|management skills)'
+        }
+        
+        # Extract all skills-related sections
+        for section_name, pattern in section_patterns.items():
+            if section_name in sections and sections[section_name].strip():
+                skills_sections.append(sections[section_name].strip())
+        
+        # If no dedicated skills sections found, return empty
+        if not skills_sections:
+            return "", ""
+        
+        # Combine all skills sections
+        combined_skills_text = "\n".join(skills_sections)
+        
+        # Create NLP document for the skills sections only
+        doc = self.nlp(combined_skills_text)
+        text_lower = combined_skills_text.lower()
 
         raw_tech = []
         raw_soft = []
@@ -1026,7 +1257,7 @@ class ResumeAnalyzer:
             # skills containing punctuation (C++, C#, node.js) -> regex whole-word check
             if re.search(r'[^A-Za-z0-9\s]', key):
                 pattern = r'(?<!\w)' + re.escape(key) + r'(?!\w)'
-                if re.search(pattern, text, re.IGNORECASE):
+                if re.search(pattern, combined_skills_text, re.IGNORECASE):
                     add_if_found(raw_tech, skill)
                 continue
 
@@ -1049,7 +1280,7 @@ class ResumeAnalyzer:
 
             if re.search(r'[^A-Za-z0-9\s]', key):
                 pattern = r'(?<!\w)' + re.escape(key) + r'(?!\w)'
-                if re.search(pattern, text, re.IGNORECASE):
+                if re.search(pattern, combined_skills_text, re.IGNORECASE):
                     add_if_found(raw_soft, skill)
                 continue
 
@@ -1062,7 +1293,7 @@ class ResumeAnalyzer:
             if re.search(pattern, text_lower):
                 add_if_found(raw_soft, skill)
 
-        # 3) Compact-text fallback only for multi-word skills
+        # 3) Compact-text fallback only for multi-word skills (avoid false positives for short tokens)
         compact_text = re.sub(r'[^a-z0-9]+', '', text_lower)
         for skill in tech_master:
             if not isinstance(skill, str):
@@ -1072,7 +1303,6 @@ class ResumeAnalyzer:
                 compact_skill = re.sub(r'[^a-z0-9]+', '', key)
                 if compact_skill and compact_skill in compact_text and not already_found(raw_tech, skill):
                     raw_tech.append(skill)
-
         for skill in soft_master:
             if not isinstance(skill, str):
                 continue
@@ -1107,7 +1337,58 @@ class ResumeAnalyzer:
         technical = normalize_and_dedupe(raw_tech, tech_canon)
         soft = normalize_and_dedupe(raw_soft, soft_canon)
 
-        return technical, soft
+        # Return as comma-separated strings
+        technical_str = ", ".join(technical) if technical else ""
+        soft_str = ", ".join(soft) if soft else ""
+        
+        return technical_str, soft_str
+
+    def extract_skills(self, text, sections=None):
+        """
+        High-precision skill extraction that prioritizes skills section:
+        - First searches in dedicated skills section if available
+        - Falls back to entire resume if no skills section found
+        - Uses PhraseMatcher for high precision multi-word skills
+        - Exact token matching for short/special tokens (C, R, Go, SQL, etc.)
+        - Whole-word regex for skills with punctuation (C++, C#, node.js)
+        - Normalize and dedupe while preserving discovery order
+        Returns: (technical_list, soft_list)
+        """
+        import re
+
+        if not text:
+            return [], []
+
+        # Determine search area: prioritize skills section if available
+        search_text = text
+        search_area_label = "entire resume"
+        
+        if sections and isinstance(sections, dict):
+            skills_section = sections.get('skills', '').strip()
+            if skills_section and len(skills_section) > 20:
+                search_text = skills_section
+                search_area_label = "skills section"
+        
+        # Create NLP document for the search area
+        doc = self.nlp(search_text)
+        text_lower = search_text.lower()
+
+        raw_tech = []
+        raw_soft = []
+
+        # 1) PhraseMatcher results (high precision)
+        for _id, start, end in self.tech_matcher(doc):
+            span = doc[start:end].text.strip()
+            if span:
+                raw_tech.append(span)
+        for _id, start, end in self.soft_matcher(doc):
+            span = doc[start:end].text.strip()
+            if span:
+                raw_soft.append(span)
+
+        # token set for exact matches
+        token_texts = [t.text for t in doc if t.text.strip()]
+        token_set = {t.lower() for t in token_texts}
 
         # Flatten master lists
         def flatten_master(master):
@@ -1140,7 +1421,7 @@ class ResumeAnalyzer:
             # skills containing punctuation (C++, C#, node.js) -> regex whole-word check
             if re.search(r'[^A-Za-z0-9\s]', key):
                 pattern = r'(?<!\w)' + re.escape(key) + r'(?!\w)'
-                if re.search(pattern, text, re.IGNORECASE):
+                if re.search(pattern, search_text, re.IGNORECASE):
                     add_if_found(raw_tech, skill)
                 continue
 
@@ -1163,7 +1444,7 @@ class ResumeAnalyzer:
 
             if re.search(r'[^A-Za-z0-9\s]', key):
                 pattern = r'(?<!\w)' + re.escape(key) + r'(?!\w)'
-                if re.search(pattern, text, re.IGNORECASE):
+                if re.search(pattern, search_text, re.IGNORECASE):
                     add_if_found(raw_soft, skill)
                 continue
 
@@ -1450,7 +1731,189 @@ class ResumeAnalyzer:
         # self.ai_assistant.set_resume_context(analysis_data) # AI Assistant removed
        
         return analysis_data
-    
+
+    def extract_skills_from_sections_only(self, text, sections=None):
+        """
+        Extract skills ONLY from dedicated 'Skills', 'Technical Skills', or 'Soft Skills' sections.
+        Does not extract from project descriptions, experience, or summary sections.
+        Returns: (technical_skills, soft_skills) as comma-separated strings
+        """
+        import re
+
+        if not text:
+            return "", ""
+
+        # Get sections if not provided
+        if sections is None:
+            sections = self.extract_sections(text)
+
+        # Look for skills sections with various naming patterns
+        skills_sections = []
+        
+        # Check for different section names
+        section_patterns = {
+            'skills': r'(skills|technical skills|soft skills|competencies|expertise|abilities|technologies)',
+            'technical_skills': r'(technical skills|technical competencies|programming|languages|tools|frameworks)',
+            'soft_skills': r'(soft skills|interpersonal skills|leadership skills|communication skills|management skills)'
+        }
+        
+        # Extract all skills-related sections
+        for section_name, pattern in section_patterns.items():
+            if section_name in sections and sections[section_name].strip():
+                skills_sections.append(sections[section_name].strip())
+        
+        # If no dedicated skills sections found, return empty
+        if not skills_sections:
+            return "", ""
+        
+        # Combine all skills sections
+        combined_skills_text = "\n".join(skills_sections)
+        
+        # Create NLP document for the skills sections only
+        doc = self.nlp(combined_skills_text)
+        text_lower = combined_skills_text.lower()
+
+        raw_tech = []
+        raw_soft = []
+
+        # 1) PhraseMatcher results (high precision)
+        for _id, start, end in self.tech_matcher(doc):
+            span = doc[start:end].text.strip()
+            if span:
+                raw_tech.append(span)
+        for _id, start, end in self.soft_matcher(doc):
+            span = doc[start:end].text.strip()
+            if span:
+                raw_soft.append(span)
+
+        # token set for exact matches
+        token_texts = [t.text for t in doc if t.text.strip()]
+        token_set = {t.lower() for t in token_texts}
+
+        # Flatten master lists
+        def flatten_master(master):
+            out = []
+            if isinstance(master, dict):
+                for _, lst in master.items():
+                    out.extend(lst)
+            elif isinstance(master, list):
+                out.extend(master)
+            return out
+
+        tech_master = flatten_master(TECHNICAL_SKILLS)
+        soft_master = flatten_master(SOFT_SKILLS)
+
+        # helpers
+        def already_found(raw_list, skill):
+            return skill.strip().lower() in {s.strip().lower() for s in raw_list}
+
+        def add_if_found(raw_list, skill):
+            if not already_found(raw_list, skill):
+                raw_list.append(skill)
+
+        # 2) Exact token matching for short/special skills (prevent substring noise)
+        for skill in tech_master:
+            if not isinstance(skill, str) or not skill.strip():
+                continue
+            key = skill.strip()
+            key_lower = key.lower()
+
+            # skills containing punctuation (C++, C#, node.js) -> regex whole-word check
+            if re.search(r'[^A-Za-z0-9\s]', key):
+                pattern = r'(?<!\w)' + re.escape(key) + r'(?!\w)'
+                if re.search(pattern, combined_skills_text, re.IGNORECASE):
+                    add_if_found(raw_tech, skill)
+                continue
+
+            # short tokens (1-3 chars) require exact token match
+            if len(re.sub(r'\s+', '', key_lower)) <= 3:
+                if key_lower in token_set:
+                    add_if_found(raw_tech, skill)
+                continue
+
+            # otherwise use whole-word boundary check
+            pattern = r'(?<!\w)' + re.escape(key_lower) + r'(?!\w)'
+            if re.search(pattern, text_lower):
+                add_if_found(raw_tech, skill)
+
+        for skill in soft_master:
+            if not isinstance(skill, str) or not skill.strip():
+                continue
+            key = skill.strip()
+            key_lower = key.lower()
+
+            if re.search(r'[^A-Za-z0-9\s]', key):
+                pattern = r'(?<!\w)' + re.escape(key) + r'(?!\w)'
+                if re.search(pattern, combined_skills_text, re.IGNORECASE):
+                    add_if_found(raw_soft, skill)
+                continue
+
+            if len(re.sub(r'\s+', '', key_lower)) <= 3:
+                if key_lower in token_set:
+                    add_if_found(raw_soft, skill)
+                continue
+
+            pattern = r'(?<!\w)' + re.escape(key_lower) + r'(?!\w)'
+            if re.search(pattern, text_lower):
+                add_if_found(raw_soft, skill)
+
+        # 3) Compact-text fallback only for multi-word skills (avoid false positives for short tokens)
+        compact_text = re.sub(r'[^a-z0-9]+', '', text_lower)
+        for skill in tech_master:
+            if not isinstance(skill, str):
+                continue
+            key = skill.strip().lower()
+            if ' ' in key and len(re.sub(r'[^a-z0-9]+', '', key)) >= 6:
+                compact_skill = re.sub(r'[^a-z0-9]+', '', key)
+                if compact_skill and compact_skill in compact_text and not already_found(raw_tech, skill):
+                    raw_tech.append(skill)
+        for skill in soft_master:
+            if not isinstance(skill, str):
+                continue
+            key = skill.strip().lower()
+            if ' ' in key and len(re.sub(r'[^a-z0-9]+', '', key)) >= 6:
+                compact_skill = re.sub(r'[^a-z0-9]+', '', key)
+                if compact_skill and compact_skill in compact_text and not already_found(raw_soft, skill):
+                    raw_soft.append(skill)
+
+        # 4) Normalize result to canonical casing from master lists and dedupe preserving order
+        def canonical_map(master_list):
+            cm = {}
+            for s in master_list:
+                if isinstance(s, str) and s.strip():
+                    cm[s.strip().lower()] = s.strip()
+            return cm
+
+        tech_canon = canonical_map(tech_master)
+        soft_canon = canonical_map(soft_master)
+
+        def normalize_and_dedupe(raw_list, canon_map):
+            out = []
+            seen = set()
+            for s in raw_list:
+                key = s.strip().lower()
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                out.append(canon_map.get(key, s.strip().title()))
+            return out
+
+        technical = normalize_and_dedupe(raw_tech, tech_canon)
+        soft = normalize_and_dedupe(raw_soft, soft_canon)
+
+        # Return as comma-separated strings
+        technical_str = ", ".join(technical) if technical else ""
+        soft_str = ", ".join(soft) if soft else ""
+        
+        return technical_str, soft_str
+
+
+# (AI Assistant removed as per request)
+
+
+# ---------------------------
+# PDF Generation Functions
+# ---------------------------
 def generate_resume_report_pdf(analysis_data, filename, job_role):
     """Generate a comprehensive PDF report of the resume analysis"""
     buffer = io.BytesIO()
@@ -1815,6 +2278,42 @@ def dashboard_page():
 
         if "Error" not in text and text.strip():
             st.success("✅ Resume processed successfully!")
+            
+            # Build RAG index for resume question answering
+            with st.spinner("🔍 Building knowledge base for AI Assistant..."):
+                rag_built, rag_error = analyzer.build_resume_rag_index(text)
+                if rag_built:
+                    st.success("✅ AI Assistant ready to answer questions about this resume!")
+                elif rag_error == "quota_exceeded":
+                    st.error("""
+                    🚫 **OpenAI Quota Exceeded**
+                    
+                    Your OpenAI API key has run out of credits. LangChain RAG AI Assistant is unavailable.
+                    
+                    **To fix this:**
+                    1. Visit https://platform.openai.com/settings/organization/billing
+                    2. Add $10 credits (analyze 200-500 resumes)
+                    3. Alternatively, use a different API key with available credits
+                    
+                    💡 **Good news:** Other resume analysis features still work:
+                    - ATS scoring
+                    - Skills detection  
+                    - Keyword analysis
+                    - PDF report generation
+                    """)
+                elif rag_error == "invalid_key":
+                    st.error("""
+                    🔑 **Invalid OpenAI API Key**
+                    
+                    Your API key is invalid or expired.
+                    
+                    **To fix this:**
+                    1. Get a valid key from https://platform.openai.com/api-keys
+                    2. Update your 'env' file: OPENAI_API_KEY=sk-proj-...
+                    3. Restart the application
+                    """)
+                else:
+                    st.warning(f"⚠️ AI Assistant unavailable: {rag_error}. Other features will work normally.")
 
 
             # Determine target role: manual selection or auto-detect
@@ -2077,6 +2576,10 @@ def dashboard_page():
                 with tab5:
                     st.markdown('<div class="section-header-modern fade-in-up">🤖 AI Resume Assistant</div>', unsafe_allow_html=True)
                     
+                    # Check if RAG is available
+                    if not analyzer.rag_enabled:
+                        st.warning("⚠️ LangChain RAG AI Assistant requires OpenAI API key with credits. Please set OPENAI_API_KEY in environment variables and ensure you have credits.")
+                    
                     # Initialize chat history if not exists
                     if 'ai_chat_history' not in st.session_state:
                         st.session_state.ai_chat_history = []
@@ -2096,42 +2599,49 @@ def dashboard_page():
                                 render_ai_message(message["content"])
                     
                     # Chat input
-                    st.markdown("### 🚀 Ask AI Assistant")
-                    st.markdown("Ask me anything about improving your resume, writing better content, or career advice!")
+                    st.markdown("### 🚀 Ask Questions About This Resume")
+                    st.markdown("🔗 **Powered by:** LangChain + FAISS + OpenAI GPT-4o-mini")
+                    st.markdown("💡 **Examples:** What certificates are mentioned? What projects are listed? What skills does the candidate have? What is the work experience?")
                     
-                    # Quick action buttons
+                    # Quick action buttons for resume-specific questions
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        if st.button("💡 Improve My Summary", key="btn_improve_summary"):
-                            prompt = "How can I improve my professional summary to make it more compelling?"
-                            context = f"Current resume analysis: ATS Score: {results.get('ats_score', 0):.1f}/100, Role Match: {results.get('role_match_percentage', 0):.1f}%, Technical Skills: {len(results.get('technical_skills', []) or [])}, Soft Skills: {len(results.get('soft_skills', []) or [])}"
-                            response = analyzer.ai_assistant.get_response(prompt, context)
+                        if st.button("📜 List Certificates", key="btn_certificates"):
+                            prompt = "What certifications or certificates are mentioned in this resume? List them all with any details provided."
+                            if analyzer.rag_enabled:
+                                response = analyzer.rag_client.query(prompt, k=5)
+                            else:
+                                response = "AI Assistant is not available. Please check your OpenAI API key."
                             st.session_state.ai_chat_history.append({"role": "user", "content": prompt})
                             st.session_state.ai_chat_history.append({"role": "assistant", "content": response})
                             st.rerun()
                     
                     with col2:
-                        if st.button("🔍 Better Keywords", key="btn_better_keywords"):
-                            prompt = f"What keywords should I add for a {detected_role} position?"
-                            context = f"Current keywords found: {', '.join(results.get('found_keywords', [])[:10])}, Missing: {', '.join(results.get('missing_keywords', [])[:10])}"
-                            response = analyzer.ai_assistant.get_response(prompt, context)
+                        if st.button("🚀 List Projects", key="btn_projects"):
+                            prompt = "What projects are mentioned in this resume? Please list all projects with their descriptions and technologies used."
+                            if analyzer.rag_enabled:
+                                response = analyzer.rag_client.query(prompt, k=5)
+                            else:
+                                response = "AI Assistant is not available. Please check your OpenAI API key."
                             st.session_state.ai_chat_history.append({"role": "user", "content": prompt})
                             st.session_state.ai_chat_history.append({"role": "assistant", "content": response})
                             st.rerun()
                     
                     with col3:
-                        if st.button("📝 Write Experience", key="btn_write_experience"):
-                            prompt = "How should I write my work experience to be more impactful?"
-                            context = f"Current experience section length: {len(results.get('sections', {}).get('experience', ''))} characters"
-                            response = analyzer.ai_assistant.get_response(prompt, context)
+                        if st.button("💼 Work Experience", key="btn_experience"):
+                            prompt = "What is the candidate's work experience? List all positions, companies, durations, and key responsibilities mentioned."
+                            if analyzer.rag_enabled:
+                                response = analyzer.rag_client.query(prompt, k=5)
+                            else:
+                                response = "AI Assistant is not available. Please check your OpenAI API key."
                             st.session_state.ai_chat_history.append({"role": "user", "content": prompt})
                             st.session_state.ai_chat_history.append({"role": "assistant", "content": response})
                             st.rerun()
                     
                     # Custom question input
                     user_question = st.text_area(
-                        "Ask me anything about your resume:",
-                        placeholder="e.g., How can I make my resume stand out for a Data Scientist role?",
+                        "Ask me anything about this resume:",
+                        placeholder="e.g., What programming languages does this candidate know? What is their educational background?",
                         height=100,
                         key="ai_chat_input"
                     )
@@ -2145,19 +2655,13 @@ def dashboard_page():
                             st.rerun()
                     
                     if send_clicked and user_question.strip():
-                        # Create context from current analysis
-                        context = f"""
-                        Resume Analysis Context:
-                        - ATS Score: {results.get('ats_score', 0):.1f}/100
-                        - Role Match: {results.get('role_match_percentage', 0):.1f}%
-                        - Technical Skills: {len(results.get('technical_skills', []) or [])} found
-                        - Soft Skills: {len(results.get('soft_skills', []) or [])} found
-                        - Target Role: {detected_role}
-                        - Found Keywords: {', '.join(results.get('found_keywords', [])[:5])}
-                        - Missing Keywords: {', '.join(results.get('missing_keywords', [])[:5])}
-                        """
+                        # Use RAG to answer questions about the resume
+                        if analyzer.rag_enabled:
+                            with st.spinner("🤔 Analyzing resume content..."):
+                                response = analyzer.rag_client.query(user_question, k=5)
+                        else:
+                            response = "🤖 LangChain RAG AI Assistant is currently unavailable. Please ensure:\n1. OPENAI_API_KEY is set in your environment with credits\n2. LangChain is installed (pip install langchain langchain-openai langchain-community)\n3. FAISS library is installed (pip install faiss-cpu)"
                         
-                        response = analyzer.ai_assistant.get_response(user_question, context)
                         st.session_state.ai_chat_history.append({"role": "user", "content": user_question})
                         st.session_state.ai_chat_history.append({"role": "assistant", "content": response})
                         st.rerun()
