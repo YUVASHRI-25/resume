@@ -853,30 +853,44 @@ class ResumeAnalyzer:
 
     def extract_text_from_pdf(self, file):
         try:
-            try:
-                file.seek(0)
-            except Exception:
-                pass
-            with pdfplumber.open(file) as pdf:
-                text = ""
-                for page in pdf.pages:
-                    text += page.extract_text() or ""
-            return text
-        except Exception:
-            try:
+            data = file.getvalue() if hasattr(file, 'getvalue') else file.read()
+            if data:
                 try:
-                    file.seek(0)
+                    try:
+                        from unstructured.partition.auto import partition
+                        elements = partition(file=io.BytesIO(data))
+                        txt = "\n".join([getattr(el, "text", "") for el in elements if getattr(el, "text", "")])
+                        if txt and txt.strip():
+                            return txt
+                    except Exception:
+                        pass
+                    bio = io.BytesIO(data)
+                    bio.seek(0)
+                    pdf_reader = PyPDF2.PdfReader(bio)
+                    text = ""
+                    for page in pdf_reader.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text
+                    if text and text.strip():
+                        return text
                 except Exception:
                     pass
-                pdf_reader = PyPDF2.PdfReader(file)
-                text = ""
-                for page in pdf_reader.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text
-                return text
+            bio2 = io.BytesIO(data) if 'data' in locals() and data else file
+            try:
+                bio2.seek(0)
             except Exception:
-                return ""
+                pass
+            with pdfplumber.open(bio2) as pdf:
+                pages_text = []
+                for page in pdf.pages:
+                    try:
+                        pages_text.append(page.extract_text() or "")
+                    except Exception:
+                        pages_text.append("")
+                return "\n".join(pages_text)
+        except Exception:
+            return "Error extracting PDF text"
 
         
 
@@ -1371,163 +1385,7 @@ class AnalytiQClient:
 
     # education extraction removed per user request
         
-    def extract_personal_information(self, text, sections):
-        """Extract personal information fields exactly as they appear in the resume"""
-        import re
-        
-        personal_info = {
-            'name': '',
-            'email': '',
-            'phone_10_digits': '',
-            'linkedin': '',
-            'github': '',
-            'leetcode': ''
-        }
-
-        # Extract name following strict priority rules described by the user.
-        # 1) Topmost non-empty text block before contact info keywords
-        # 2) Apply capitalization/word rules (2-4 words, no digits, allow initials and hyphens)
-        lines = [ln.strip() for ln in text.split('\n')]
-        # look only at top portion of document (first 15-20 lines)
-        header_lines = lines[:20]
-
-        contact_keywords = ('email', 'phone', 'mobile', 'linkedin', 'portfolio', 'contact', 'github', 'leetcode')
-        stop_index = None
-        for i, ln in enumerate(header_lines):
-            if not ln:
-                continue
-            low = ln.lower()
-            # stop searching when we reach an obvious contact line
-            if any(kw in low for kw in contact_keywords) or '@' in ln or re.search(r'\d{3,}', ln):
-                stop_index = i
-                break
-
-        search_lines = header_lines[:stop_index] if stop_index is not None else header_lines
-
-        # helper regexes
-        word_pat = re.compile(r"^(?:[A-Z][a-zA-Z]*(?:[-'][A-Za-z][a-zA-Z]*)*|[A-Z]\.?)(?:\.)?$")
-        banned_words = set(['resume', 'curriculum', 'vitae', 'cv', 'profile', 'objective', 'engineer', 'developer', 'intern', 'student'])
-        org_suffixes = ('ltd', 'inc', 'university', 'college', 'institute', 'company', 'corp', 'pvt', 'llc')
-
-        def looks_like_name(s: str) -> bool:
-            if not s or len(s) < 2 or len(s) > 60:
-                return False
-            if any(ch.isdigit() for ch in s):
-                return False
-            low = s.lower()
-            if any(b in low for b in banned_words):
-                return False
-            if any(suffix in low for suffix in org_suffixes):
-                return False
-            words = [w.strip(".,") for w in s.split() if w.strip(".,")]
-            if not (2 <= len(words) <= 4):
-                return False
-            for w in words:
-                if not word_pat.match(w):
-                    return False
-            return True
-
-        # 1) pick first matching topmost line
-        for ln in search_lines:
-            if not ln:
-                continue
-            if looks_like_name(ln):
-                personal_info['name'] = ln
-                break
-
-        # 2) Fallback: if we found a contact line, pick the nearest non-empty line immediately above it
-        if not personal_info['name'] and stop_index is not None and stop_index > 0:
-            for j in range(stop_index - 1, max(-1, stop_index - 4), -1):
-                cand = header_lines[j].strip()
-                if cand and looks_like_name(cand):
-                    personal_info['name'] = cand
-                    break
-        
-        # Extract email
-        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-        email_match = re.search(email_pattern, text)
-        if email_match:
-            personal_info['email'] = email_match.group()
-        
-        # Extract phone (special rule: 10 digits only)
-        phone_patterns = [
-            r'\+?[\d\s\-\(\)]{10,}',  # General phone pattern
-            r'\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b',  # US format
-            r'\b\d{10}\b',  # 10 digits
-            r'\+91[-.\s]?\d{5}[-.\s]?\d{5}',  # Indian format
-        ]
-        
-        for pattern in phone_patterns:
-            phone_matches = re.findall(pattern, text)
-            for phone in phone_matches:
-                # Extract only digits
-                digits = re.sub(r'\D', '', phone)
-                if len(digits) >= 10:
-                    personal_info['phone_10_digits'] = digits[-10:]  # Keep last 10 digits
-                    break
-            if personal_info['phone_10_digits']:
-                break
-        
-        # Extract LinkedIn - look for properly formatted LinkedIn URLs
-        linkedin_patterns = [
-            r'(?:linkedin\.com/in|linkedin\.com/profile|linkedin\.com/pub)/[\w\-]+(?:/[^\s]*)?',
-            r'https?://(?:www\.)?linkedin\.com/in/[\w\-]+(?:/[^\s]*)?'
-        ]
-        
-        # First try finding LinkedIn near the word "LinkedIn" or "Profile"
-        context_pattern = r'(?:linkedin|profile|contact).*?((?:linkedin\.com|(?:www\.)?linkedin\.com)/\S+)'
-        context_match = re.search(context_pattern, text.lower(), re.IGNORECASE | re.DOTALL)
-        if context_match:
-            url = context_match.group(1)
-            if not url.endswith(('.pdf', '.doc', '.html')):  # Basic URL cleanup
-                personal_info['linkedin'] = url.strip('."\')')
-        else:
-            # Fall back to pattern matching if no contextual match
-            for pattern in linkedin_patterns:
-                linkedin_match = re.search(pattern, text, re.IGNORECASE)
-                if linkedin_match:
-                    url = linkedin_match.group()
-                    if not url.endswith(('.pdf', '.doc', '.html')):
-                        personal_info['linkedin'] = url.strip('."\')')
-                        break
-        
-        # Extract GitHub - look for properly formatted GitHub URLs
-        github_patterns = [
-            r'github\.com/[\w\-]+',
-            r'https?://(?:www\.)?github\.com/[\w\-]+'
-        ]
-        
-        # First look near the word "GitHub"
-        github_context = r'(?:github|repo).*?((?:github\.com|(?:www\.)?github\.com)/\S+)'
-        github_context_match = re.search(github_context, text.lower(), re.IGNORECASE | re.DOTALL)
-        if github_context_match:
-            url = github_context_match.group(1)
-            if not url.endswith(('.pdf', '.doc', '.html')):
-                personal_info['github'] = url.strip('."\')')
-        else:
-            for pattern in github_patterns:
-                github_match = re.search(pattern, text, re.IGNORECASE)
-                if github_match:
-                    url = github_match.group()
-                    if not url.endswith(('.pdf', '.doc', '.html')):
-                        personal_info['github'] = url.strip('."\')')
-                        break
-        
-        # Extract LeetCode - only extract if explicitly labeled as LeetCode
-        leetcode_patterns = [
-            r'leetcode\.com/[\w\-]+',
-            r'https?://(?:www\.)?leetcode\.com/[\w\-]+'
-        ]
-        
-        # Only match LeetCode if the word "LeetCode" appears nearby
-        leetcode_context = r'leetcode.*?((?:leetcode\.com|(?:www\.)?leetcode\.com)/\S+)'
-        leetcode_match = re.search(leetcode_context, text.lower(), re.IGNORECASE | re.DOTALL)
-        if leetcode_match:
-            url = leetcode_match.group(1)
-            if not url.endswith(('.pdf', '.doc', '.html')):
-                personal_info['leetcode'] = url.strip('."\')')
-
-        return personal_info
+    
 
     def extract_education(self, text, sections):
         return []
@@ -1541,6 +1399,80 @@ class AnalytiQClient:
     def extract_certifications(self, text, sections):
         return []
 
+    def extract_section_items(self, raw_section_text: str):
+        if not raw_section_text:
+            return []
+        lines = [ln.strip('-•\u2022 ').strip() for ln in raw_section_text.splitlines()]
+        out = []
+        for ln in lines:
+            if not ln:
+                continue
+            if len(ln) < 2:
+                continue
+            out.append(ln)
+        return out[:50]
+
+    def _extract_block_by_headings(self, text: str, start_heads, stop_heads):
+        import re as _re
+        if not text:
+            return ""
+        start_re = _re.compile(r"^\s*(?:" + "|".join(start_heads) + r")\b.*$", _re.IGNORECASE | _re.MULTILINE)
+        stop_re = _re.compile(r"^\s*(?:" + "|".join(stop_heads) + r")\b.*$", _re.IGNORECASE | _re.MULTILINE)
+        m = start_re.search(text)
+        if not m:
+            return ""
+        start_idx = m.end()
+        stop_m = stop_re.search(text, start_idx)
+        end_idx = stop_m.start() if stop_m else len(text)
+        block = text[start_idx:end_idx]
+        # Remove stray non-related subheads inside block
+        lines = []
+        stray = _re.compile(r"^\s*(languages?|hobbies|awards?|objective|profile)\b", _re.IGNORECASE)
+        for ln in block.splitlines():
+            if stray.search(ln):
+                continue
+            lines.append(ln)
+        return "\n".join(lines).strip()
+
+    def extract_education_simple(self, text, sections):
+        edu_text = (sections or {}).get('education', '')
+        if not edu_text:
+            start_heads = [r'education', r'academics?', r'qualification', r'educational\s*background']
+            stop_heads = [r'experience', r'skills?', r'projects?', r'certifications?', r'achievements?', r'awards?', r'activities?', r'summary', r'objective']
+            edu_text = self._extract_block_by_headings(text, start_heads, stop_heads)
+        return self.extract_section_items(edu_text)
+
+    def extract_certificates_simple(self, text, sections):
+        cert_text = (sections or {}).get('certifications', '')
+        if not cert_text:
+            start_heads = [r'certifications?', r'certificates?', r'courses?', r'training']
+            stop_heads = [r'experience', r'skills?', r'projects?', r'education', r'summary', r'objective']
+            block = self._extract_block_by_headings(text, start_heads, stop_heads)
+            if block:
+                cert_text = block
+            else:
+                lower = (text or '').lower()
+                if any(k in lower for k in ['certificate', 'certification', 'course', 'badge', 'training']):
+                    cert_text = '\n'.join([ln for ln in (text or '').splitlines() if any(k in ln.lower() for k in ['certificate', 'certification', 'course', 'badge', 'training'])])
+        return self.extract_section_items(cert_text)
+
+    def extract_internships_simple(self, text, sections):
+        exp_text = (sections or {}).get('experience', '')
+        if not exp_text:
+            start_heads = [r'experience', r'employment', r'work\s*history', r'internships?']
+            stop_heads = [r'education', r'skills?', r'projects?', r'certifications?', r'awards?', r'summary', r'objective']
+            exp_text = self._extract_block_by_headings(text, start_heads, stop_heads)
+        # filter lines that mention internship or likely durations
+        lines = [ln for ln in exp_text.splitlines() if any(k in ln.lower() for k in ['intern', 'internship', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec', '202', '201', 'duration'])]
+        return self.extract_section_items('\n'.join(lines) if lines else exp_text)
+
+    def extract_projects_simple(self, text, sections):
+        proj_text = (sections or {}).get('projects', '')
+        if not proj_text:
+            start_heads = [r'projects?', r'personal\s*projects?', r'academic\s*projects?']
+            stop_heads = [r'experience', r'education', r'skills?', r'certifications?', r'summary', r'objective']
+            proj_text = self._extract_block_by_headings(text, start_heads, stop_heads)
+        return self.extract_section_items(proj_text)
     def keyword_matching(self, text, job_role):
         if job_role not in JOB_KEYWORDS:
             return [], 0
@@ -1578,6 +1510,68 @@ class AnalytiQClient:
             score += 10
         return min(score, 100)
 
+    def _openrouter_llama3(self, prompt: str) -> str:
+        try:
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            if not api_key:
+                return "OpenRouter API key not configured. Set OPENROUTER_API_KEY in environment or .env."
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "http://localhost:8501"),
+                "X-Title": os.getenv("OPENROUTER_APP_TITLE", "Resume Insight"),
+            }
+            body = {
+                "model": os.getenv("LLAMA3_MODEL", "meta-llama/llama-3.1-8b-instruct"),
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.2,
+                "max_tokens": 800
+            }
+            r = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
+            if r.status_code != 200:
+                return f"Llama3 request failed: {r.status_code} {r.text[:200]}"
+            data = r.json()
+            try:
+                return data["choices"][0]["message"]["content"].strip()
+            except Exception:
+                return json.dumps(data)[:1000]
+        except Exception as e:
+            return f"Llama3 error: {str(e)}"
+
+    def llama3_extract_personal_info(self, resume_text: str) -> str:
+        prompt = (
+            "You are a professional resume information extractor.\n"
+            "Your task is to carefully read the provided resume text and extract the following specific information in a clear, readable, and structured format.\n\n"
+            "Only extract the information if it is clearly present.\n"
+            "If something is missing, write \"Not Found\".\n\n"
+            "The output format must be EXACTLY as shown below:\n\n"
+            "Personal Information:\n"
+            "Name: \n"
+            "Email: \n"
+            "Phone: \n"
+            "LinkedIn: \n"
+            "GitHub: \n"
+            "LeetCode: \n"
+            "Codeforces: \n"
+            "CodeChef: \n"
+            "HackerRank: \n\n"
+            "Education:\n"
+            "[List each qualification with degree, institution, year, and CGPA or percentage if available]\n\n"
+            "Certificates:\n"
+            "[List certificate name, platform or organization, and year]\n\n"
+            "Internships:\n"
+            "[List position, company name, duration, and 1-line description of work done]\n\n"
+            "Projects:\n"
+            "[List title and 1-line summary]\n\n"
+            "---\n\n"
+            "Now extract the above details accurately from the following resume text:\n"
+            f"{resume_text}"
+        )
+        return self._openrouter_llama3(prompt)
+
     def analyze_resume(self, text, job_role):
         sections = self.extract_sections(text)
         tech_skills, soft_skills = self.extract_skills(text)
@@ -1597,6 +1591,8 @@ class AnalytiQClient:
             "section_count": len([s for s in sections.values() if s])
         }
         return analysis_data
+
+        
     
 def generate_resume_report_pdf(analysis_data, filename, job_role):
     """Generate a comprehensive PDF report of the resume analysis"""
@@ -2149,87 +2145,78 @@ def dashboard_page():
                         )
 
 
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Personal Information", "📊 Summary", "🔍 Skills Analysis", "🎯 ATS Analysis", "🧠 AnalytiQ"])
+                tab1, tab2, tab3, tab4 = st.tabs(["📋 Personal Information", "📊 Summary", "🔍 Skills Analysis", "🧠 AnalytiQ"])
 
 
                 # ----- TAB 1: Personal Information -----
                 with tab1:
                     st.markdown('<div class="section-header-modern fade-in-up">📋 Personal Information</div>', unsafe_allow_html=True)
-                    
-                    # Extract personal information (use safe .get for sections)
-                    # Runtime fallback: ensure method exists (handles hot-reload edge cases)
-                    if not hasattr(analyzer, 'extract_personal_information'):
-                        def _extract_personal_information(self, text, sections):
-                            import re as _re
-                            info = {'name': '', 'email': '', 'phone_10_digits': '', 'linkedin': '', 'github': '', 'leetcode': ''}
-                            lines = [ln.strip() for ln in (text or '').split('\n')]
-                            # naive name: first non-empty line without digits/symbols
-                            for ln in lines[:20]:
-                                if ln and not any(ch.isdigit() for ch in ln):
-                                    info['name'] = ln
-                                    break
-                            m = _re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', text or '')
-                            if m:
-                                info['email'] = m.group()
-                            m2 = _re.search(r'\b\d{10}\b', text or '')
-                            if m2:
-                                info['phone_10_digits'] = m2.group()
-                            m3 = _re.search(r'https?://(?:www\.)?linkedin\.com/[^\s)]+', text or '', _re.IGNORECASE)
-                            if m3:
-                                info['linkedin'] = m3.group()
-                            m4 = _re.search(r'https?://(?:www\.)?github\.com/[^\s)]+', text or '', _re.IGNORECASE)
-                            if m4:
-                                info['github'] = m4.group()
-                            m5 = _re.search(r'https?://(?:www\.)?leetcode\.com/[^\s)]+', text or '', _re.IGNORECASE)
-                            if m5:
-                                info['leetcode'] = m5.group()
-                            return info
-                        analyzer.extract_personal_information = _extract_personal_information.__get__(analyzer, analyzer.__class__)
-
-                    personal_info = analyzer.extract_personal_information(text, results.get('sections', {}))
-                    
-                    # Display personal information in a structured format
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown("### 👤 Basic Information")
-                        
-                        # Name
-                        if personal_info['name']:
-                            st.markdown(f"**Name:** {personal_info['name']}")
-                        else:
-                            st.markdown("**Name:** Not included")
-                        
-                        # Email
-                        if personal_info['email']:
-                            st.markdown(f"**Email:** {personal_info['email']}")
-                        else:
-                            st.markdown("**Email:** Not included")
-                        
-                        # Phone
-                        if personal_info['phone_10_digits']:
-                            st.markdown(f"**Phone:** {personal_info['phone_10_digits']}")
-                        else:
-                            st.markdown("**Phone:** Not included")
-                        
-                        # LinkedIn
-                        if personal_info['linkedin']:
-                            st.markdown(f"**LinkedIn:** {personal_info['linkedin']}")
-                        else:
-                            st.markdown("**LinkedIn:** Not included")
-                        
-                        # GitHub
-                        if personal_info['github']:
-                            st.markdown(f"**GitHub:** {personal_info['github']}")
-                        else:
-                            st.markdown("**GitHub:** Not included")
-                        
-                        # LeetCode - only show when present
-                        if personal_info.get('leetcode'):
-                            st.markdown(f"**LeetCode:** {personal_info['leetcode']}")
-                    
-                    with col2:
-                        pass
+                    if not hasattr(analyzer, 'llama3_extract_personal_info'):
+                        def _llama3_extract_personal_info(self, resume_text: str) -> str:
+                            api_key = os.getenv("OPENROUTER_API_KEY")
+                            if not api_key:
+                                return "OpenRouter API key not configured. Set OPENROUTER_API_KEY in environment or .env."
+                            url = "https://openrouter.ai/api/v1/chat/completions"
+                            headers = {
+                                "Authorization": f"Bearer {api_key}",
+                                "Content-Type": "application/json",
+                                "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "http://localhost:8501"),
+                                "X-Title": os.getenv("OPENROUTER_APP_TITLE", "Resume Insight"),
+                            }
+                            body = {
+                                "model": os.getenv("LLAMA3_MODEL", "meta-llama/llama-3.1-8b-instruct"),
+                                "messages": [
+                                    {"role": "user", "content": (
+                                        "You are a professional resume information extractor.\n"
+                                        "Your task is to carefully read the provided resume text and extract the following specific information in a clear, readable, and structured format.\n\n"
+                                        "Only extract the information if it is clearly present.\n"
+                                        "If something is missing, write \"Not Found\".\n\n"
+                                        "The output format must be EXACTLY as shown below:\n\n"
+                                        "Personal Information:\n"
+                                        "Name: \n"
+                                        "Email: \n"
+                                        "Phone: \n"
+                                        "LinkedIn: \n"
+                                        "GitHub: \n"
+                                        "LeetCode: \n"
+                                        "Codeforces: \n"
+                                        "CodeChef: \n"
+                                        "HackerRank: \n\n"
+                                        "Education:\n"
+                                        "[List each qualification with degree, institution, year, and CGPA or percentage if available]\n\n"
+                                        "Certificates:\n"
+                                        "[List certificate name, platform or organization, and year]\n\n"
+                                        "Internships:\n"
+                                        "[List position, company name, duration, and 1-line description of work done]\n\n"
+                                        "Projects:\n"
+                                        "[List title and 1-line summary]\n\n"
+                                        "---\n\n"
+                                        "Now extract the above details accurately from the following resume text:\n"
+                                        f"{resume_text}"
+                                    )}
+                                ],
+                                "temperature": 0.2,
+                                "max_tokens": 800
+                            }
+                            try:
+                                r = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
+                                if r.status_code != 200:
+                                    return f"Llama3 request failed: {r.status_code} {r.text[:200]}"
+                                data = r.json()
+                                try:
+                                    return data["choices"][0]["message"]["content"].strip()
+                                except Exception:
+                                    return json.dumps(data)[:1000]
+                            except Exception as e:
+                                return f"Llama3 error: {str(e)}"
+                        analyzer.llama3_extract_personal_info = _llama3_extract_personal_info.__get__(analyzer, analyzer.__class__)
+                    with st.spinner("Extracting structured personal information with Llama3..."):
+                        llama_output = analyzer.llama3_extract_personal_info(text or "")
+                    st.markdown("### 🧠 Extracted Details")
+                    if isinstance(llama_output, str) and llama_output.strip():
+                        st.text(llama_output)
+                    else:
+                        st.warning("Could not extract personal information at this time.")
 
 
                 # ----- TAB 2: Summary -----
@@ -2346,39 +2333,8 @@ def dashboard_page():
                     # Removed per request: AI Assistant for Skills section
 
 
-                # ----- TAB 4: ATS Analysis -----
+                # ----- TAB 4: 🧠 AnalytiQ (Llama 3 via OpenRouter) -----
                 with tab4:
-                    st.markdown('<div class="section-header-modern fade-in-up">🎯 ATS Compatibility Analysis</div>', unsafe_allow_html=True)
-                    col1, col2 = st.columns([1, 2])
-                    with col1:
-                        ats_score = results['ats_score']
-                        st.metric("Overall ATS Score", f"{ats_score}/100")
-                        st.progress(ats_score / 100)
-                        if ats_score >= 80:
-                            st.success("🎉 Excellent ATS compatibility")
-                        elif ats_score >= 60:
-                            st.warning("⚠️ Good ATS compatibility")
-                        else:
-                            st.error("🚨 Needs ATS optimization")
-                    with col2:
-                        st.markdown("### 💡 ATS Optimization Tips")
-                        tips = [
-                            "✅ Use standard section headings: Experience, Education, Skills, etc.",
-                            "✅ Include relevant keywords naturally throughout your resume",
-                            "✅ Use bullet points to improve readability and scanning",
-                            "✅ Avoid images, graphics, tables, and complex formatting",
-                            "✅ Use standard fonts like Arial, Calibri, or Times New Roman",
-                            "✅ Save your resume as a PDF to preserve formatting",
-                            "✅ Include your contact information prominently at the top",
-                            "✅ Use consistent formatting throughout the document"
-                        ]
-                        for tip in tips:
-                            st.markdown(tip)
-                        # Removed per request: Missing keywords inside ATS tab
-
-
-                # ----- TAB 5: 🧠 AnalytiQ (Llama 3 via OpenRouter) -----
-                with tab5:
                     st.markdown('<div class="section-header-modern fade-in-up">🧠 AnalytiQ (Llama 3)</div>', unsafe_allow_html=True)
                     aq = AnalytiQClient()
                     if not aq.enabled:
