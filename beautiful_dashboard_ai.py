@@ -390,157 +390,354 @@ JOB_KEYWORDS = {
     "Data Scientist": [
         "python", "machine learning", "statistics", "pandas", "numpy", "scikit-learn",
         "tensorflow", "pytorch", "sql", "data analysis", "visualization", "jupyter",
-        "r", "statistics", "deep learning", "neural networks", "regression",
-        "classification", "clustering", "feature engineering", "model deployment"
+        "deep learning", "neural networks", "regression", "classification", "clustering",
+        "feature engineering", "model deployment", "data preprocessing", "matplotlib",
+        "seaborn", "data wrangling", "big data", "data cleaning", "feature selection"
     ],
+
     "Software Engineer": [
         "programming", "java", "python", "javascript", "react", "node.js", "database",
         "git", "agile", "testing", "debugging", "api", "frontend", "backend",
         "algorithms", "data structures", "microservices", "docker", "kubernetes",
-        "rest api", "graphql", "version control", "ci/cd"
+        "rest api", "graphql", "version control", "ci/cd", "software development life cycle",
+        "object oriented programming", "system design", "spring boot", "mvc"
     ],
-    "Product Manager": [
-        "product", "strategy", "roadmap", "stakeholder", "analytics", "user experience",
-        "market research", "agile", "scrum", "requirements", "metrics", "wireframes",
-        "user stories", "product development", "customer research", "competitive analysis",
-        "go-to-market", "product launch"
-    ],
-    "Marketing Manager": [
-        "marketing", "digital marketing", "seo", "social media", "analytics", "campaigns",
-        "brand", "content", "advertising", "growth", "conversion", "roi", "crm",
-        "email marketing", "ppc", "content marketing", "brand management", "lead generation"
-    ],
-    "Data Analyst": [
-        "sql", "excel", "python", "tableau", "power bi", "statistics", "reporting",
-        "data visualization", "business intelligence", "analytics", "dashboards", "kpi",
-        "data mining", "etl", "data modeling", "statistical analysis", "forecasting"
-    ],
-    "DevOps Engineer": [
-        "docker", "kubernetes", "aws", "azure", "gcp", "jenkins", "ci/cd", "terraform",
-        "ansible", "monitoring", "linux", "bash", "infrastructure", "deployment",
-        "cloud computing", "automation", "configuration management", "security"
-    ],
-    "UI/UX Designer": [
-        "figma", "sketch", "adobe xd", "prototyping", "wireframes", "user research",
-        "usability testing", "design systems", "responsive design", "accessibility",
-        "typography", "visual design", "interaction design", "user interface", "user experience"
-    ],
-    "Cybersecurity Analyst": [
-        "security", "penetration testing", "vulnerability assessment", "siem", "firewall",
-        "incident response", "compliance", "risk assessment", "cryptography", "network security",
-        "security monitoring", "threat analysis", "security policies", "audit"
-    ],
-    "Business Analyst": [
-        "requirements gathering", "process improvement", "stakeholder management",
-        "documentation", "business process", "gap analysis", "user stories", "workflow",
-        "project management", "data analysis", "business intelligence", "process mapping"
-    ],
+
     "Full Stack Developer": [
         "html", "css", "javascript", "react", "angular", "vue", "node.js", "express",
         "mongodb", "postgresql", "rest api", "graphql", "version control", "responsive design",
-        "frontend", "backend", "database", "api development", "web development"
+        "frontend", "backend", "database", "api development", "web development", "next.js",
+        "typescript", "tailwind", "bootstrap", "redux", "authentication", "jwt", "session management"
     ],
+
     "Machine Learning Engineer": [
-        "python", "tensorflow", "pytorch", "scikit-learn", "pandas", "numpy", "machine learning",
-        "deep learning", "neural networks", "computer vision", "nlp", "data science",
-        "algorithms", "statistics", "linear algebra", "calculus", "regression", "classification",
-        "clustering", "feature engineering", "model deployment", "mlops", "docker", "kubernetes"
+        "python", "tensorflow", "pytorch", "scikit-learn", "pandas", "numpy",
+        "machine learning", "deep learning", "neural networks", "computer vision", "nlp",
+        "data science", "algorithms", "statistics", "linear algebra", "calculus",
+        "regression", "classification", "clustering", "feature engineering", "model deployment",
+        "mlops", "docker", "kubernetes", "airflow", "mlflow", "huggingface", "transformers"
     ],
+
     "AI Engineer": [
         "artificial intelligence", "machine learning", "deep learning", "neural networks",
         "python", "tensorflow", "pytorch", "computer vision", "nlp", "natural language processing",
         "opencv", "transformers", "bert", "gpt", "reinforcement learning", "generative ai",
-        "llm", "chatbot", "model optimization", "ai ethics", "edge ai", "quantization"
+        "llm", "chatbot", "model optimization", "ai ethics", "edge ai", "quantization",
+        "openai api", "langchain", "embedding models", "prompt engineering"
+    ],
+
+    "Data Analyst": [
+        "sql", "excel", "python", "tableau", "power bi", "statistics", "reporting",
+        "data visualization", "business intelligence", "analytics", "dashboards", "kpi",
+        "data mining", "etl", "data modeling", "statistical analysis", "forecasting",
+        "data interpretation", "insights", "data storytelling", "pivot tables"
+    ],
+
+    "Data Engineer": [
+        "python", "sql", "spark", "hadoop", "etl", "data pipeline", "big data",
+        "airflow", "aws", "azure", "gcp", "data lake", "data warehouse",
+        "snowflake", "redshift", "kafka", "hive", "flink", "data ingestion",
+        "data modeling", "schema design", "apache beam"
+    ],
+
+    "Cloud Engineer": [
+        "aws", "azure", "gcp", "cloud computing", "terraform", "docker", "kubernetes",
+        "ci/cd", "devops", "cloudformation", "linux", "bash", "monitoring",
+        "load balancing", "autoscaling", "cloud security", "iam", "s3", "lambda",
+        "ec2", "virtual machines", "networking", "vpc", "ansible"
+    ],
+
+    "DevOps Engineer": [
+        "docker", "kubernetes", "aws", "azure", "gcp", "jenkins", "ci/cd", "terraform",
+        "ansible", "monitoring", "linux", "bash", "infrastructure", "deployment",
+        "cloud computing", "automation", "configuration management", "security",
+        "gitlab", "prometheus", "grafana", "helm", "scripting", "elastic stack", "nginx"
+    ],
+
+    "Cybersecurity Analyst": [
+        "security", "penetration testing", "vulnerability assessment", "siem", "firewall",
+        "incident response", "compliance", "risk assessment", "cryptography", "network security",
+        "security monitoring", "threat analysis", "security policies", "audit", "forensics",
+        "wireshark", "ids", "ips", "malware analysis", "encryption", "ethical hacking"
+    ],
+
+    "UI/UX Designer": [
+        "figma", "sketch", "adobe xd", "prototyping", "wireframes", "user research",
+        "usability testing", "design systems", "responsive design", "accessibility",
+        "typography", "visual design", "interaction design", "user interface", "user experience",
+        "persona creation", "journey mapping", "a/b testing", "information architecture"
+    ],
+
+    "Product Manager": [
+        "product", "strategy", "roadmap", "stakeholder", "analytics", "user experience",
+        "market research", "agile", "scrum", "requirements", "metrics", "wireframes",
+        "user stories", "product development", "customer research", "competitive analysis",
+        "go-to-market", "product launch", "prioritization", "product lifecycle", "kpi tracking"
+    ],
+
+    "Marketing Manager": [
+        "marketing", "digital marketing", "seo", "social media", "analytics", "campaigns",
+        "brand", "content", "advertising", "growth", "conversion", "roi", "crm",
+        "email marketing", "ppc", "content marketing", "brand management", "lead generation",
+        "copywriting", "google ads", "facebook ads", "market segmentation"
+    ],
+
+    "Business Analyst": [
+        "requirements gathering", "process improvement", "stakeholder management",
+        "documentation", "business process", "gap analysis", "user stories", "workflow",
+        "project management", "data analysis", "business intelligence", "process mapping",
+        "reporting", "ms excel", "tableau", "communication", "use cases", "swot analysis"
+    ],
+
+    "QA Engineer": [
+        "testing", "automation", "selenium", "junit", "pytest", "api testing",
+        "regression testing", "test cases", "bug tracking", "jira", "manual testing",
+        "performance testing", "load testing", "unit testing", "cypress", "postman",
+        "quality assurance", "ci/cd", "test automation", "integration testing"
+    ],
+
+    "System Administrator": [
+        "linux", "windows server", "networking", "dns", "dhcp", "firewall",
+        "troubleshooting", "bash", "powershell", "virtualization", "vmware",
+        "active directory", "backup", "system monitoring", "patch management",
+        "user management", "server configuration", "storage management", "shell scripting"
+    ],
+
+    "Blockchain Developer": [
+        "blockchain", "ethereum", "solidity", "smart contracts", "web3", "crypto",
+        "nft", "defi", "metamask", "truffle", "ganache", "hyperledger", "rust",
+        "tokenization", "consensus", "ipfs", "cryptography", "decentralized apps",
+        "smart contract auditing"
+    ],
+
+    "Mobile App Developer": [
+        "android", "ios", "react native", "flutter", "swift", "kotlin", "xcode",
+        "mobile ui", "firebase", "push notifications", "api integration",
+        "app store", "play store", "cross-platform", "dart", "mobile design"
+    ],
+
+    "Embedded Systems Engineer": [
+        "embedded c", "microcontroller", "arduino", "raspberry pi", "iot",
+        "firmware", "real-time systems", "uart", "spi", "i2c", "pcb design",
+        "c programming", "hardware interfacing", "sensor integration", "debugging"
+    ],
+
+    "Cloud Architect": [
+        "aws", "azure", "gcp", "architecture", "cloud security", "terraform",
+        "networking", "serverless", "lambda", "kubernetes", "docker",
+        "cloud cost optimization", "devops", "system design", "cloud migration"
     ]
 }
 
 
-# Enhanced Technical Skills Database
 TECHNICAL_SKILLS = {
     "programming_languages": [
-        "python", "java", "javascript", "typescript", "c++", "c#", "php", "ruby", "go", "rust",
-        "swift", "kotlin", "scala", "matlab", "perl", "shell", "bash", "powershell"
+        "python", "java", "javascript", "typescript", "c", "c++", "c#", "php", "ruby",
+        "go", "rust", "swift", "kotlin", "scala", "r", "matlab", "perl", "dart",
+        "objective-c", "shell", "bash", "powershell", "lua", "elixir", "haskell"
     ],
+
     "web_technologies": [
         "html", "css", "react", "angular", "vue", "node.js", "express", "django", "flask",
         "spring", "laravel", "rails", "next.js", "nuxt.js", "svelte", "jquery", "bootstrap",
-        "tailwind", "sass", "less", "webpack", "vite", "npm", "yarn"
+        "tailwind", "sass", "less", "webpack", "vite", "npm", "yarn", "astro", "remix",
+        "htmx", "lit", "alpine.js", "fastapi"
     ],
+
     "databases": [
         "sql", "mysql", "postgresql", "mongodb", "redis", "elasticsearch", "cassandra",
-        "dynamodb", "oracle", "sqlite", "mariadb", "neo4j", "influxdb", "couchdb"
+        "dynamodb", "oracle", "sqlite", "mariadb", "neo4j", "influxdb", "couchdb",
+        "snowflake", "redshift", "bigquery", "timescaledb", "firestore", "supabase"
     ],
+
     "cloud_platforms": [
-        "aws", "azure", "gcp", "heroku", "digital ocean", "linode", "vultr", "cloudflare",
-        "firebase", "vercel", "netlify", "railway"
+        "aws", "azure", "gcp", "oracle cloud", "ibm cloud", "heroku", "digital ocean",
+        "linode", "vultr", "cloudflare", "firebase", "vercel", "netlify", "railway",
+        "render", "openstack", "wasabi", "supabase", "oci", "akamai"
     ],
+
     "devops_tools": [
         "docker", "kubernetes", "jenkins", "gitlab ci", "github actions", "terraform",
-        "ansible", "chef", "puppet", "vagrant", "prometheus", "grafana", "elk stack"
+        "ansible", "chef", "puppet", "vagrant", "prometheus", "grafana", "elk stack",
+        "argocd", "helm", "circleci", "travis ci", "teamcity", "consul", "vault", "fluxcd",
+        "open telemetry", "istio"
     ],
+
     "data_science": [
         "machine learning", "deep learning", "tensorflow", "pytorch", "scikit-learn",
         "pandas", "numpy", "matplotlib", "seaborn", "plotly", "jupyter", "rstudio",
-        "spark", "hadoop", "kafka", "airflow", "dbt", "mlflow"
+        "spark", "hadoop", "kafka", "airflow", "dbt", "mlflow", "huggingface", "transformers",
+        "pandas profiling", "streamlit", "gradio", "data cleaning", "feature engineering",
+        "model evaluation", "auto ml", "llm fine-tuning"
     ],
+
+    "ai_tools_and_frameworks": [
+        "langchain", "llamaindex", "ollama", "openai", "vertex ai", "azure openai", "anthropic",
+        "cohere", "huggingface transformers", "autogen", "haystack", "chromadb", "faiss",
+        "pinecone", "weaviate", "milvus", "rag", "vector database", "llm orchestration",
+        "prompt engineering", "agentic ai", "retrieval augmentation", "model quantization"
+    ],
+
     "mobile_development": [
         "react native", "flutter", "xamarin", "ionic", "cordova", "android studio",
-        "xcode", "swift", "kotlin", "objective-c"
+        "xcode", "swift", "kotlin", "objective-c", "jetpack compose", "swiftui"
     ],
+
     "testing_tools": [
         "selenium", "cypress", "jest", "mocha", "chai", "pytest", "junit", "testng",
-        "cucumber", "postman", "insomnia", "k6", "jmeter"
+        "cucumber", "postman", "insomnia", "k6", "jmeter", "robot framework", "playwright",
+        "karma", "enzyme", "appium", "loadrunner"
     ],
+
     "design_tools": [
         "figma", "sketch", "adobe xd", "photoshop", "illustrator", "canva", "invision",
-        "zeplin", "principle", "framer"
+        "zeplin", "principle", "framer", "after effects", "coreldraw", "blender",
+        "adobe premiere pro", "affinity designer"
     ],
+
     "project_management": [
         "jira", "confluence", "trello", "asana", "monday.com", "notion", "slack",
-        "microsoft teams", "zoom", "github", "gitlab", "bitbucket"
+        "microsoft teams", "zoom", "github", "gitlab", "bitbucket", "basecamp", "clickup",
+        "linear", "miro", "whimsical", "figjam"
     ],
+
     "business_intelligence": [
         "tableau", "power bi", "looker", "qlikview", "excel", "google sheets",
-        "salesforce", "hubspot", "zapier"
+        "salesforce", "hubspot", "zapier", "metabase", "datastudio", "mode analytics",
+        "domo", "microstrategy"
+    ],
+
+    "cybersecurity": [
+        "penetration testing", "network security", "firewall", "siem", "wireshark",
+        "burpsuite", "nessus", "nmap", "metasploit", "osint", "threat intelligence",
+        "vulnerability assessment", "incident response", "kali linux", "forensics",
+        "security monitoring", "zero trust", "cyber defense", "ids", "ips"
+    ],
+
+    "blockchain_and_web3": [
+        "blockchain", "ethereum", "solidity", "smart contracts", "web3.js", "ethers.js",
+        "nft", "defi", "metamask", "polygon", "binance smart chain", "ipfs", "rust",
+        "solana", "near protocol", "foundry", "hardhat", "truffle", "alchemy"
+    ],
+
+    "emerging_technologies": [
+        "generative ai", "chatgpt", "gpt", "llm", "autonomous agents", "ai copilots",
+        "quantum computing", "edge ai", "internet of things", "iot", "robotics", "rpa",
+        "drone technology", "ar", "vr", "xr", "metaverse", "digital twin"
+    ],
+
+    "operating_systems": [
+        "windows", "linux", "macos", "ubuntu", "centos", "debian", "fedora", "kali linux",
+        "red hat", "arch linux", "unix", "android", "ios"
+    ],
+
+    "version_control_and_ci_cd": [
+        "git", "github", "gitlab", "bitbucket", "svn", "mercurial",
+        "jenkins", "circleci", "travis ci", "teamcity", "github actions", "gitlab ci",
+        "bamboo", "azure devops", "codepipeline", "codedeploy"
+    ],
+
+    "networking_and_infrastructure": [
+        "tcp/ip", "dns", "http", "ftp", "ssh", "vpn", "load balancing",
+        "proxy", "firewall", "routing", "switching", "subnetting", "cloud networking",
+        "virtualization", "vmware", "hyper-v"
+    ],
+
+    "productivity_and_automation": [
+        "excel macros", "google apps script", "zapier", "make.com", "power automate",
+        "n8n", "airtable", "notion automation", "keyboard maestro", "selenium automation"
     ]
 }
 
 
-# Enhanced Soft Skills Database
+# 🌟 Ultimate Soft Skills Database (2025 Edition)
 SOFT_SKILLS = {
     "leadership": [
         "leadership", "team leadership", "team management", "mentoring", "coaching",
-        "people management", "strategic leadership", "cross-functional leadership"
+        "people management", "strategic leadership", "cross-functional leadership",
+        "decision making", "delegation", "motivating others", "influencing", "empowerment",
+        "performance management", "supervising", "visionary leadership"
     ],
+
     "communication": [
         "communication", "verbal communication", "written communication", "presentation",
-        "public speaking", "technical writing", "documentation", "client communication"
+        "public speaking", "technical writing", "documentation", "client communication",
+        "listening skills", "storytelling", "negotiation", "nonverbal communication",
+        "persuasive communication", "cross-cultural communication", "email etiquette"
     ],
+
     "collaboration": [
         "teamwork", "collaboration", "cross-functional collaboration", "stakeholder management",
-        "interpersonal skills", "relationship building", "networking"
+        "interpersonal skills", "relationship building", "networking", "partnership",
+        "team coordination", "conflict resolution", "peer support", "synergy",
+        "inclusive teamwork", "interdepartmental collaboration"
     ],
+
     "problem_solving": [
         "problem solving", "critical thinking", "analytical thinking", "troubleshooting",
-        "debugging", "root cause analysis", "creative problem solving"
+        "debugging", "root cause analysis", "creative problem solving", "decision analysis",
+        "logical reasoning", "strategic problem solving", "data-driven decision making",
+        "hypothesis testing", "innovation in problem solving"
     ],
+
     "project_management": [
         "project management", "agile", "scrum", "kanban", "time management", "deadline management",
-        "resource management", "risk management", "change management"
+        "resource management", "risk management", "change management", "planning",
+        "task prioritization", "milestone tracking", "project coordination", "budget management",
+        "workflow optimization", "sprint planning", "stakeholder alignment"
     ],
+
     "adaptability": [
         "adaptability", "flexibility", "resilience", "learning agility", "continuous learning",
-        "innovation", "creativity", "open-mindedness"
+        "innovation", "creativity", "open-mindedness", "growth mindset", "stress management",
+        "embracing change", "handling uncertainty", "positive attitude", "proactive learning"
     ],
+
     "customer_focus": [
         "customer service", "customer satisfaction", "user experience", "client relations",
-        "customer success", "support", "helpdesk"
+        "customer success", "support", "helpdesk", "empathy", "user-centered thinking",
+        "relationship management", "customer engagement", "client retention", "service excellence"
     ],
+
     "business_acumen": [
         "business acumen", "strategic thinking", "commercial awareness", "market analysis",
-        "competitive analysis", "business development", "sales", "negotiation"
+        "competitive analysis", "business development", "sales", "negotiation",
+        "financial literacy", "roi mindset", "entrepreneurial thinking", "goal orientation",
+        "value creation", "organizational strategy", "vision setting"
+    ],
+
+    "emotional_intelligence": [
+        "emotional intelligence", "self-awareness", "empathy", "self-regulation",
+        "motivation", "social awareness", "relationship management", "stress tolerance",
+        "compassion", "emotional balance", "respect", "mindfulness"
+    ],
+
+    "innovation_and_creativity": [
+        "creativity", "innovation", "design thinking", "brainstorming", "ideation",
+        "concept development", "curiosity", "experimentation", "visionary thinking",
+        "entrepreneurial mindset", "problem reframing", "continuous improvement"
+    ],
+
+    "remote_and_digital_collaboration": [
+        "remote collaboration", "virtual communication", "digital fluency",
+        "video conferencing", "async communication", "online facilitation",
+        "remote teamwork", "time zone coordination", "distributed teams",
+        "virtual leadership", "online productivity", "collaborative tools"
+    ],
+
+    "ethics_and_professionalism": [
+        "integrity", "accountability", "ethics", "honesty", "confidentiality",
+        "work ethic", "discipline", "responsibility", "reliability", "transparency",
+        "professional conduct", "commitment", "trustworthiness"
+    ],
+
+    "organizational_skills": [
+        "organization", "prioritization", "multitasking", "attention to detail",
+        "time efficiency", "workflow structuring", "documentation organization",
+        "goal setting", "process improvement", "record keeping"
     ]
 }
+
 
 
 # ---------------------------
@@ -898,7 +1095,7 @@ class AnalytiQClient:
     def __init__(self):
         self.api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
-        # Use a current OpenRouter model id. Allow override via env.
+        # Allow override via env; default to a stable OpenRouter model id
         self.model = os.getenv("ANALYTIQ_MODEL", "meta-llama/llama-3.1-8b-instruct")
 
     @property
@@ -940,23 +1137,34 @@ class AnalytiQClient:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            # Recommended by OpenRouter to improve routing/quotas
             "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "http://localhost:8501"),
             "X-Title": os.getenv("OPENROUTER_APP_TITLE", "Resume Insight AnalytiQ")
         }
         try:
-            r = requests.post(self.base_url, headers=headers, data=json.dumps(payload), timeout=60)
-            if r.status_code >= 400:
-                # Try to surface server-provided error for easier debugging
+            total_timeout = int(os.getenv("OPENROUTER_TIMEOUT", "60"))
+            attempts = int(os.getenv("OPENROUTER_RETRIES", "3"))
+            last_err = None
+            for i in range(max(1, attempts)):
                 try:
-                    err = r.json()
-                    msg = err.get("error", {}).get("message") or err.get("message") or str(err)
-                except Exception:
-                    msg = r.text
-                return f"AnalytiQ error {r.status_code}: {msg}"
-            data = r.json()
-            msg = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return msg.strip() or "No response."
+                    r = requests.post(self.base_url, headers=headers, data=json.dumps(payload), timeout=total_timeout)
+                    if r.status_code >= 400:
+                        try:
+                            err = r.json()
+                            msg = err.get("error", {}).get("message") or err.get("message") or str(err)
+                        except Exception:
+                            msg = r.text
+                        last_err = f"AnalytiQ error {r.status_code}: {msg}"
+                        if r.status_code >= 500 and i < attempts - 1:
+                            import time; time.sleep(1.5 * (2 ** i)); continue
+                        return last_err
+                    data = r.json()
+                    msg = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return msg.strip() or "No response."
+                except Exception as e:
+                    last_err = str(e)
+                    if i < attempts - 1:
+                        import time; time.sleep(1.5 * (2 ** i)); continue
+            return f"AnalytiQ error: {last_err}"
         except Exception as e:
             return f"AnalytiQ error: {str(e)}"
         except:
@@ -1523,25 +1731,42 @@ class AnalytiQClient:
                 "X-Title": os.getenv("OPENROUTER_APP_TITLE", "Resume Insight"),
             }
             body = {
-                "model": os.getenv("LLAMA3_MODEL", "meta-llama/llama-3.1-8b-instruct"),
+                "model": os.getenv("ANALYTIQ_MODEL", os.getenv("LLAMA3_MODEL", "meta-llama/llama-3.1-8b-instruct")),
                 "messages": [
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": 0.2,
                 "max_tokens": 800
             }
-            r = requests.post(url, headers=headers, data=json.dumps(body), timeout=60)
-            if r.status_code != 200:
-                return f"Llama3 request failed: {r.status_code} {r.text[:200]}"
-            data = r.json()
-            try:
-                return data["choices"][0]["message"]["content"].strip()
-            except Exception:
-                return json.dumps(data)[:1000]
+            total_timeout = int(os.getenv("OPENROUTER_TIMEOUT", "60"))
+            attempts = int(os.getenv("OPENROUTER_RETRIES", "3"))
+            last_err = None
+            for i in range(max(1, attempts)):
+                try:
+                    r = requests.post(url, headers=headers, data=json.dumps(body), timeout=total_timeout)
+                    if r.status_code != 200:
+                        last_err = f"Llama3 request failed: {r.status_code} {r.text[:200]}"
+                        if r.status_code >= 500 and i < attempts - 1:
+                            import time; time.sleep(1.5 * (2 ** i)); continue
+                        return last_err
+                    data = r.json()
+                    try:
+                        return data["choices"][0]["message"]["content"].strip()
+                    except Exception:
+                        return json.dumps(data)[:1000]
+                except Exception as e:
+                    last_err = str(e)
+                    if i < attempts - 1:
+                        import time; time.sleep(1.5 * (2 ** i)); continue
+            return f"Llama3 error: {last_err}"
         except Exception as e:
             return f"Llama3 error: {str(e)}"
 
     def llama3_extract_personal_info(self, resume_text: str) -> str:
+        resume_text = (resume_text or "")
+        max_chars = int(os.getenv("PI_MAX_CHARS", "12000"))
+        if len(resume_text) > max_chars:
+            resume_text = resume_text[:max_chars]
         prompt = (
             "You are a professional resume information extractor.\n"
             "Your task is to carefully read the provided resume text and extract the following specific information in a clear, readable, and structured format.\n\n"
@@ -2163,37 +2388,38 @@ def dashboard_page():
                                 "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "http://localhost:8501"),
                                 "X-Title": os.getenv("OPENROUTER_APP_TITLE", "Resume Insight"),
                             }
+                            prompt = (
+                                "You are a professional resume information extractor.\n"
+                                "Your task is to carefully read the provided resume text and extract the following specific information in a clear, readable, and structured format.\n\n"
+                                "Only extract the information if it is clearly present.\n"
+                                "If something is missing, write \"Not Found\".\n\n"
+                                "The output format must be EXACTLY as shown below:\n\n"
+                                "Personal Information:\n"
+                                "Name: \n"
+                                "Email: \n"
+                                "Phone: \n"
+                                "LinkedIn: \n"
+                                "GitHub: \n"
+                                "LeetCode: \n"
+                                "Codeforces: \n"
+                                "CodeChef: \n"
+                                "HackerRank: \n\n"
+                                "Education:\n"
+                                "[List each qualification with degree, institution, year, and CGPA or percentage if available]\n\n"
+                                "Certificates:\n"
+                                "[List certificate name, platform or organization, and year]\n\n"
+                                "Internships:\n"
+                                "[List position, company name, duration, and 1-line description of work done]\n\n"
+                                "Projects:\n"
+                                "[List title and 1-line summary]\n\n"
+                                "---\n\n"
+                                "Now extract the above details accurately from the following resume text:\n"
+                                f"{resume_text}"
+                            )
                             body = {
-                                "model": os.getenv("LLAMA3_MODEL", "meta-llama/llama-3.1-8b-instruct"),
+                                "model": os.getenv("ANALYTIQ_MODEL", os.getenv("LLAMA3_MODEL", "meta-llama/llama-3.1-8b-instruct")),
                                 "messages": [
-                                    {"role": "user", "content": (
-                                        "You are a professional resume information extractor.\n"
-                                        "Your task is to carefully read the provided resume text and extract the following specific information in a clear, readable, and structured format.\n\n"
-                                        "Only extract the information if it is clearly present.\n"
-                                        "If something is missing, write \"Not Found\".\n\n"
-                                        "The output format must be EXACTLY as shown below:\n\n"
-                                        "Personal Information:\n"
-                                        "Name: \n"
-                                        "Email: \n"
-                                        "Phone: \n"
-                                        "LinkedIn: \n"
-                                        "GitHub: \n"
-                                        "LeetCode: \n"
-                                        "Codeforces: \n"
-                                        "CodeChef: \n"
-                                        "HackerRank: \n\n"
-                                        "Education:\n"
-                                        "[List each qualification with degree, institution, year, and CGPA or percentage if available]\n\n"
-                                        "Certificates:\n"
-                                        "[List certificate name, platform or organization, and year]\n\n"
-                                        "Internships:\n"
-                                        "[List position, company name, duration, and 1-line description of work done]\n\n"
-                                        "Projects:\n"
-                                        "[List title and 1-line summary]\n\n"
-                                        "---\n\n"
-                                        "Now extract the above details accurately from the following resume text:\n"
-                                        f"{resume_text}"
-                                    )}
+                                    {"role": "user", "content": prompt}
                                 ],
                                 "temperature": 0.2,
                                 "max_tokens": 800
@@ -2203,10 +2429,7 @@ def dashboard_page():
                                 if r.status_code != 200:
                                     return f"Llama3 request failed: {r.status_code} {r.text[:200]}"
                                 data = r.json()
-                                try:
-                                    return data["choices"][0]["message"]["content"].strip()
-                                except Exception:
-                                    return json.dumps(data)[:1000]
+                                return data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                             except Exception as e:
                                 return f"Llama3 error: {str(e)}"
                         analyzer.llama3_extract_personal_info = _llama3_extract_personal_info.__get__(analyzer, analyzer.__class__)
