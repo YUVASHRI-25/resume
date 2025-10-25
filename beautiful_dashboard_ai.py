@@ -28,6 +28,30 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
+import shutil
+
+# Ensure .env is loaded before OCR detection
+load_dotenv('.env', override=True)
+
+try:
+    from PIL import Image
+    import pytesseract
+    OCR_AVAILABLE = True
+    # Resolve Tesseract path: env, PATH, common install path
+    tess_path = os.getenv("TESSERACT_PATH")
+    if not tess_path:
+        tess_path = shutil.which("tesseract") or r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+    if tess_path:
+        pytesseract.pytesseract.tesseract_cmd = tess_path
+    # Verify tesseract is actually callable
+    try:
+        _ = pytesseract.get_tesseract_version()
+    except Exception:
+        OCR_AVAILABLE = False
+except Exception:
+    OCR_AVAILABLE = False
+    Image = None
+    pytesseract = None
 
 load_dotenv('.env', override=True)
 
@@ -829,13 +853,104 @@ class ResumeAnalyzer:
 
     def extract_text_from_pdf(self, file):
         try:
+            try:
+                file.seek(0)
+            except Exception:
+                pass
             with pdfplumber.open(file) as pdf:
                 text = ""
                 for page in pdf.pages:
                     text += page.extract_text() or ""
             return text
+        except Exception:
+            try:
+                try:
+                    file.seek(0)
+                except Exception:
+                    pass
+                pdf_reader = PyPDF2.PdfReader(file)
+                text = ""
+                for page in pdf_reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text
+                return text
+            except Exception:
+                return ""
+
+        
+
+class AnalytiQClient:
+    def __init__(self):
+        self.api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+        self.base_url = "https://openrouter.ai/api/v1/chat/completions"
+        # Use a current OpenRouter model id. Allow override via env.
+        self.model = os.getenv("ANALYTIQ_MODEL", "meta-llama/llama-3.1-8b-instruct")
+
+    @property
+    def enabled(self):
+        return bool(self.api_key)
+
+    def ask(self, resume_text: str, user_query: str) -> str:
+        if not self.enabled:
+            return "AnalytiQ is unavailable. Set OPENROUTER_API_KEY to enable Llama 3."
+        import requests
+        system_prompt = (
+            "You are AnalytiQ — an intelligent resume analysis and career insight assistant integrated inside a Resume Analyzer app.\n"
+            "Your responsibilities:\n"
+            "1. Analyze the user’s uploaded resume content (provided below).\n"
+            "2. Accurately answer questions about the resume — such as education, skills, projects, or experiences.\n"
+            "3. Provide career-related insights and resume improvement suggestions when asked.\n"
+            "4. Respond in a professional, concise, and helpful tone.\n\n"
+            "-------------------------\n"
+            "RESUME CONTENT (Extracted Text):\n"
+            f"{resume_text}\n"
+            "-------------------------\n\n"
+            "Guidelines:\n"
+            "- Always base your answers on the resume first, if the question relates to it.\n"
+            "- If the question is general (e.g., “How can I improve my resume?” or “What new skills should I add for an AI engineer role?”), respond using your own knowledge.\n"
+            "- For extraction tasks (like “list my education” or “what are my technical skills?”), return clean, structured results using bullet points or sections.\n"
+            "- If the requested information isn’t found in the resume, reply clearly: “This information isn’t available in your resume. However, here’s a suggestion…” and continue helpfully.\n"
+            "- Never mix unrelated sections.\n"
+            "- Keep answers factual, context-aware, and friendly.\n"
+            "- Do not hallucinate or make up details about the resume.\n"
+        )
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_query or ""}
+            ],
+            "temperature": 0.2
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            # Recommended by OpenRouter to improve routing/quotas
+            "HTTP-Referer": os.getenv("OPENROUTER_REFERRER", "http://localhost:8501"),
+            "X-Title": os.getenv("OPENROUTER_APP_TITLE", "Resume Insight AnalytiQ")
+        }
+        try:
+            r = requests.post(self.base_url, headers=headers, data=json.dumps(payload), timeout=60)
+            if r.status_code >= 400:
+                # Try to surface server-provided error for easier debugging
+                try:
+                    err = r.json()
+                    msg = err.get("error", {}).get("message") or err.get("message") or str(err)
+                except Exception:
+                    msg = r.text
+                return f"AnalytiQ error {r.status_code}: {msg}"
+            data = r.json()
+            msg = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return msg.strip() or "No response."
+        except Exception as e:
+            return f"AnalytiQ error: {str(e)}"
         except:
             try:
+                try:
+                    file.seek(0)
+                except Exception:
+                    pass
                 pdf_reader = PyPDF2.PdfReader(file)
                 text = ""
                 for page in pdf_reader.pages:
@@ -847,20 +962,52 @@ class ResumeAnalyzer:
 
     def extract_text_from_docx(self, file):
         try:
-            doc = Document(file)
+            data = file.getvalue() if hasattr(file, 'getvalue') else file.read()
+            doc = Document(io.BytesIO(data))
             text = ""
             for paragraph in doc.paragraphs:
                 text += paragraph.text + "\n"
             return text
-        except:
-            return "Error extracting DOCX text"
+        except Exception:
+            try:
+                try:
+                    file.seek(0)
+                except Exception:
+                    pass
+                doc = Document(file)
+                text = "\n".join(p.text for p in doc.paragraphs)
+                return text
+            except Exception:
+                return "Error extracting DOCX text"
 
 
     def extract_text_from_txt(self, file):
         try:
-            return str(file.read(), "utf-8")
+            if hasattr(file, 'getvalue'):
+                return file.getvalue().decode('utf-8', errors='ignore')
+            else:
+                try:
+                    file.seek(0)
+                except Exception:
+                    pass
+                return file.read().decode('utf-8', errors='ignore')
         except:
             return "Error extracting TXT text"
+
+
+    def extract_text_from_image(self, file):
+        try:
+            if not OCR_AVAILABLE:
+                return "Error extracting IMAGE text"
+            try:
+                file.seek(0)
+            except Exception:
+                pass
+            img = Image.open(file).convert('RGB')
+            text = pytesseract.image_to_string(img)
+            return text
+        except Exception:
+            return "Error extracting IMAGE text"
 
 # ...existing code...
     def extract_contact_info(self, text: str) -> Dict[str, Any]:
@@ -915,7 +1062,7 @@ class ResumeAnalyzer:
             'contact': r'(contact|email|phone|mobile|tel|address|linkedin|github)',
             'summary': r'(summary|objective|profile|about|overview)',
             'experience': r'(experience|employment|work|career|professional|job|position)',
-            'education': r'(education|academic|qualification|degree|university|college)',
+            'education': r'(education|academic background|educational qualification|academic details|academic profile|academic performance|scholastic record|qualification summary|education\s*&\s*training|educational background|qualification|degree|university|college|school|board)',
             'skills': r'(skills|technical|competencies|expertise|abilities|technologies)',
             'projects': r'(projects|portfolio|work samples|personal projects)',
             'certifications': r'(certifications?|certificates?|licensed?|credentials)'
@@ -1382,11 +1529,18 @@ class ResumeAnalyzer:
 
         return personal_info
 
+    def extract_education(self, text, sections):
+        return []
 
-# ...existing code...
-    # ...existing code...
-           
-# ...existing code...
+    def get_education_json(self, text, sections):
+        return {"education": []}
+
+    def get_education_detailed_json(self, text, sections):
+        return {"education": []}
+
+    def extract_certifications(self, text, sections):
+        return []
+
     def keyword_matching(self, text, job_role):
         if job_role not in JOB_KEYWORDS:
             return [], 0
@@ -1398,7 +1552,6 @@ class ResumeAnalyzer:
                 found_keywords.append(keyword)
         match_percentage = (len(found_keywords) / len(keywords)) * 100
         return found_keywords, match_percentage
-
 
     def calculate_ats_score(self, text, sections):
         score = 0
@@ -1425,14 +1578,12 @@ class ResumeAnalyzer:
             score += 10
         return min(score, 100)
 
-
     def analyze_resume(self, text, job_role):
         sections = self.extract_sections(text)
         tech_skills, soft_skills = self.extract_skills(text)
         found_keywords, match_percentage = self.keyword_matching(text, job_role)
         ats_score = self.calculate_ats_score(text, sections)
         overall_score = (ats_score + match_percentage) / 2
-       
         analysis_data = {
             "sections": sections,
             "technical_skills": tech_skills,
@@ -1445,10 +1596,6 @@ class ResumeAnalyzer:
             "word_count": len(text.split()),
             "section_count": len([s for s in sections.values() if s])
         }
-       
-        # Set context for AI assistant
-        # self.ai_assistant.set_resume_context(analysis_data) # AI Assistant removed
-       
         return analysis_data
     
 def generate_resume_report_pdf(analysis_data, filename, job_role):
@@ -1787,7 +1934,7 @@ def dashboard_page():
     st.markdown('<div class="section-header-modern fade-in-up">📄 Upload Your Resume</div>', unsafe_allow_html=True)
 
 
-    uploaded_file = st.file_uploader("📁 Select your resume file", type=['pdf', 'docx', 'txt'], help="Supported formats: PDF, DOCX, TXT")
+    uploaded_file = st.file_uploader("📁 Select your resume file", type=['pdf', 'docx', 'txt', 'jpg', 'jpeg', 'png'], help="Supported formats: PDF, DOCX, TXT, JPG, JPEG, PNG")
 
 
     if uploaded_file is not None:
@@ -1802,16 +1949,50 @@ def dashboard_page():
         
         with st.spinner("🔄 Processing your resume..."):
             try:
-                if uploaded_file.type == "application/pdf":
+                mime = (uploaded_file.type or '').lower()
+                name = (uploaded_file.name or '').lower()
+                is_pdf = mime == "application/pdf" or name.endswith('.pdf')
+                is_docx = mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or name.endswith('.docx')
+                is_img = mime in ("image/jpeg", "image/png") or name.endswith(('.jpg', '.jpeg', '.png'))
+                is_txt = mime in ("text/plain",) or name.endswith('.txt')
+
+                if is_pdf:
                     text = analyzer.extract_text_from_pdf(uploaded_file)
-                elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                elif is_docx:
                     text = analyzer.extract_text_from_docx(uploaded_file)
-                else:
+                elif is_img:
+                    if not OCR_AVAILABLE:
+                        st.warning("OCR is not available. Install Tesseract and set TESSERACT_PATH to enable image extraction.")
+                    text = analyzer.extract_text_from_image(uploaded_file)
+                elif is_txt:
                     text = analyzer.extract_text_from_txt(uploaded_file)
+                else:
+                    # Fallback by extension and then txt as last resort
+                    if name.endswith('.docx'):
+                        text = analyzer.extract_text_from_docx(uploaded_file)
+                    elif name.endswith(('.jpg', '.jpeg', '.png')):
+                        if not OCR_AVAILABLE:
+                            st.warning("OCR is not available. Install Tesseract and set TESSERACT_PATH to enable image extraction.")
+                        text = analyzer.extract_text_from_image(uploaded_file)
+                    elif name.endswith('.pdf'):
+                        text = analyzer.extract_text_from_pdf(uploaded_file)
+                    else:
+                        text = analyzer.extract_text_from_txt(uploaded_file)
             except Exception as e:
                 st.error(f"❌ Error extracting text: {str(e)}")
                 return
 
+
+        # If image and text is empty/error, guide the user and stop
+        if 'is_img' in locals() and is_img and (not text or not text.strip() or 'Error' in text):
+            st.error("Image text could not be extracted. Please install Tesseract OCR and set TESSERACT_PATH to the tesseract.exe path, then try again.")
+            st.info(r"Windows example: C:\\Program Files\\Tesseract-OCR\\tesseract.exe")
+            return
+
+        # If docx/txt produced empty, show a gentle message
+        if (("is_docx" in locals() and is_docx) or ("is_txt" in locals() and is_txt)) and (not text or not text.strip() or 'Error' in text):
+            st.error("The uploaded file has no readable text. Ensure it contains selectable text (not only images). For image-only documents, please upload as JPG/PNG with OCR enabled.")
+            return
 
         if "Error" not in text and text.strip():
             st.success("✅ Resume processed successfully!")
@@ -1840,6 +2021,101 @@ def dashboard_page():
 
 
             try:
+                # Safe fallback: if analyze_resume is missing (hot-reload edge cases), define it on the fly
+                # Ensure critical methods exist (handles hot-reload edge cases)
+                if not hasattr(analyzer, 'extract_sections'):
+                    def _extract_sections(self, text):
+                        import re as _re
+                        sections = {}
+                        section_patterns = {
+                            'contact': r'(contact|email|phone|mobile|tel|address|linkedin|github)',
+                            'summary': r'(summary|objective|profile|about|overview)',
+                            'experience': r'(experience|employment|work|career|professional|job|position)',
+                            'education': r'(education|academic background|educational qualification|academic details|academic profile|academic performance|scholastic record|qualification summary|education\s*&\s*training|educational background|qualification|degree|university|college|school|board)',
+                            'skills': r'(skills|technical|competencies|expertise|abilities|technologies)',
+                            'projects': r'(projects|portfolio|work samples|personal projects)',
+                            'certifications': r'(certifications?|certificates?|licensed?|credentials)'
+                        }
+                        lines = text.splitlines()
+                        current = 'header'
+                        sections[current] = []
+                        for ln in lines:
+                            s = ln.strip()
+                            if not s:
+                                continue
+                            matched = False
+                            for name, pat in section_patterns.items():
+                                if _re.search(r'^\s*' + pat + r'\b', s, _re.IGNORECASE):
+                                    current = name
+                                    sections.setdefault(current, [])
+                                    matched = True
+                                    break
+                            if not matched:
+                                sections.setdefault(current, []).append(s)
+                        for k in list(sections.keys()):
+                            sections[k] = "\n".join(sections[k]).strip()
+                        return sections
+                    analyzer.extract_sections = _extract_sections.__get__(analyzer, analyzer.__class__)
+
+                if not hasattr(analyzer, 'extract_skills'):
+                    def _extract_skills(self, text):
+                        return [], []
+                    analyzer.extract_skills = _extract_skills.__get__(analyzer, analyzer.__class__)
+
+                if not hasattr(analyzer, 'keyword_matching'):
+                    def _keyword_matching(self, text, job_role):
+                        kws = JOB_KEYWORDS.get(job_role, [])
+                        tl = text.lower()
+                        found = [kw for kw in kws if kw.lower() in tl]
+                        pct = (len(found) / len(kws) * 100) if kws else 0
+                        return found, pct
+                    analyzer.keyword_matching = _keyword_matching.__get__(analyzer, analyzer.__class__)
+
+                if not hasattr(analyzer, 'calculate_ats_score'):
+                    def _calculate_ats_score(self, text, sections):
+                        score = 0
+                        req = ['experience', 'education', 'skills']
+                        for s in req:
+                            if sections.get(s) and len(sections[s]) > 50:
+                                score += 13.33
+                        wc = len(text.split())
+                        if 300 <= wc <= 800:
+                            score += 20
+                        elif wc > 200:
+                            score += 10
+                        if re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', text):
+                            score += 10
+                        if re.search(r'(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text):
+                            score += 10
+                        bullets = sum(len(re.findall(p, text)) for p in [r'•', r'◦', r'\*', r'-\s', r'→'])
+                        if bullets >= 5:
+                            score += 20
+                        elif bullets >= 2:
+                            score += 10
+                        return min(score, 100)
+                    analyzer.calculate_ats_score = _calculate_ats_score.__get__(analyzer, analyzer.__class__)
+
+                if not hasattr(analyzer, 'analyze_resume'):
+                    def _analyze_resume(self, text, job_role):
+                        sections = self.extract_sections(text)
+                        tech_skills, soft_skills = self.extract_skills(text)
+                        found_keywords, match_percentage = self.keyword_matching(text, job_role)
+                        ats_score = self.calculate_ats_score(text, sections)
+                        overall_score = (ats_score + match_percentage) / 2
+                        return {
+                            "sections": sections,
+                            "technical_skills": tech_skills,
+                            "soft_skills": soft_skills,
+                            "found_keywords": found_keywords,
+                            "missing_keywords": [kw for kw in JOB_KEYWORDS[job_role] if kw not in found_keywords],
+                            "role_match_percentage": match_percentage,
+                            "ats_score": ats_score,
+                            "overall_score": overall_score,
+                            "word_count": len(text.split()),
+                            "section_count": len([s for s in sections.values() if s])
+                        }
+                    analyzer.analyze_resume = _analyze_resume.__get__(analyzer, analyzer.__class__)
+
                 results = analyzer.analyze_resume(text, detected_role)
                 # Defensive checks: ensure results is a dict and sections is a dict
                 if results is None:
@@ -1873,7 +2149,7 @@ def dashboard_page():
                         )
 
 
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Personal Information", "📊 Summary", "🔍 Skills Analysis", "🎯 ATS Analysis", "🤖 AI Assistant"])
+                tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Personal Information", "📊 Summary", "🔍 Skills Analysis", "🎯 ATS Analysis", "🧠 AnalytiQ"])
 
 
                 # ----- TAB 1: Personal Information -----
@@ -1881,6 +2157,35 @@ def dashboard_page():
                     st.markdown('<div class="section-header-modern fade-in-up">📋 Personal Information</div>', unsafe_allow_html=True)
                     
                     # Extract personal information (use safe .get for sections)
+                    # Runtime fallback: ensure method exists (handles hot-reload edge cases)
+                    if not hasattr(analyzer, 'extract_personal_information'):
+                        def _extract_personal_information(self, text, sections):
+                            import re as _re
+                            info = {'name': '', 'email': '', 'phone_10_digits': '', 'linkedin': '', 'github': '', 'leetcode': ''}
+                            lines = [ln.strip() for ln in (text or '').split('\n')]
+                            # naive name: first non-empty line without digits/symbols
+                            for ln in lines[:20]:
+                                if ln and not any(ch.isdigit() for ch in ln):
+                                    info['name'] = ln
+                                    break
+                            m = _re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', text or '')
+                            if m:
+                                info['email'] = m.group()
+                            m2 = _re.search(r'\b\d{10}\b', text or '')
+                            if m2:
+                                info['phone_10_digits'] = m2.group()
+                            m3 = _re.search(r'https?://(?:www\.)?linkedin\.com/[^\s)]+', text or '', _re.IGNORECASE)
+                            if m3:
+                                info['linkedin'] = m3.group()
+                            m4 = _re.search(r'https?://(?:www\.)?github\.com/[^\s)]+', text or '', _re.IGNORECASE)
+                            if m4:
+                                info['github'] = m4.group()
+                            m5 = _re.search(r'https?://(?:www\.)?leetcode\.com/[^\s)]+', text or '', _re.IGNORECASE)
+                            if m5:
+                                info['leetcode'] = m5.group()
+                            return info
+                        analyzer.extract_personal_information = _extract_personal_information.__get__(analyzer, analyzer.__class__)
+
                     personal_info = analyzer.extract_personal_information(text, results.get('sections', {}))
                     
                     # Display personal information in a structured format
@@ -1924,7 +2229,6 @@ def dashboard_page():
                             st.markdown(f"**LeetCode:** {personal_info['leetcode']}")
                     
                     with col2:
-                        # Education display intentionally hidden
                         pass
 
 
@@ -2073,95 +2377,24 @@ def dashboard_page():
                         # Removed per request: Missing keywords inside ATS tab
 
 
-                # ----- TAB 5: AI Assistant (ChatGPT-like) -----
+                # ----- TAB 5: 🧠 AnalytiQ (Llama 3 via OpenRouter) -----
                 with tab5:
-                    st.markdown('<div class="section-header-modern fade-in-up">🤖 AI Resume Assistant</div>', unsafe_allow_html=True)
-                    
-                    # Initialize chat history if not exists
-                    if 'ai_chat_history' not in st.session_state:
-                        st.session_state.ai_chat_history = []
-                    
-                    # Display chat history
-                    if st.session_state.ai_chat_history:
-                        st.markdown("### 💬 Conversation History")
-                        for message in st.session_state.ai_chat_history[-10:]:  # Show last 10 messages
-                            if message["role"] == "user":
-                                st.markdown(f"""
-                                <div class="chat-message chat-user fade-in-up">
-                                    <strong>👤 You:</strong>
-                                    <div style="margin-top:0.5rem;">{message["content"]}</div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            else:
-                                render_ai_message(message["content"])
-                    
-                    # Chat input
-                    st.markdown("### 🚀 Ask AI Assistant")
-                    st.markdown("Ask me anything about improving your resume, writing better content, or career advice!")
-                    
-                    # Quick action buttons
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("💡 Improve My Summary", key="btn_improve_summary"):
-                            prompt = "How can I improve my professional summary to make it more compelling?"
-                            context = f"Current resume analysis: ATS Score: {results.get('ats_score', 0):.1f}/100, Role Match: {results.get('role_match_percentage', 0):.1f}%, Technical Skills: {len(results.get('technical_skills', []) or [])}, Soft Skills: {len(results.get('soft_skills', []) or [])}"
-                            response = analyzer.ai_assistant.get_response(prompt, context)
-                            st.session_state.ai_chat_history.append({"role": "user", "content": prompt})
-                            st.session_state.ai_chat_history.append({"role": "assistant", "content": response})
-                            st.rerun()
-                    
-                    with col2:
-                        if st.button("🔍 Better Keywords", key="btn_better_keywords"):
-                            prompt = f"What keywords should I add for a {detected_role} position?"
-                            context = f"Current keywords found: {', '.join(results.get('found_keywords', [])[:10])}, Missing: {', '.join(results.get('missing_keywords', [])[:10])}"
-                            response = analyzer.ai_assistant.get_response(prompt, context)
-                            st.session_state.ai_chat_history.append({"role": "user", "content": prompt})
-                            st.session_state.ai_chat_history.append({"role": "assistant", "content": response})
-                            st.rerun()
-                    
-                    with col3:
-                        if st.button("📝 Write Experience", key="btn_write_experience"):
-                            prompt = "How should I write my work experience to be more impactful?"
-                            context = f"Current experience section length: {len(results.get('sections', {}).get('experience', ''))} characters"
-                            response = analyzer.ai_assistant.get_response(prompt, context)
-                            st.session_state.ai_chat_history.append({"role": "user", "content": prompt})
-                            st.session_state.ai_chat_history.append({"role": "assistant", "content": response})
-                            st.rerun()
-                    
-                    # Custom question input
-                    user_question = st.text_area(
-                        "Ask me anything about your resume:",
-                        placeholder="e.g., How can I make my resume stand out for a Data Scientist role?",
+                    st.markdown('<div class="section-header-modern fade-in-up">🧠 AnalytiQ (Llama 3)</div>', unsafe_allow_html=True)
+                    aq = AnalytiQClient()
+                    if not aq.enabled:
+                        st.warning("AnalytiQ requires OPENROUTER_API_KEY to be set. Add it to your environment or .env file.")
+                    st.markdown("Ask questions about your resume or general resume/career advice.")
+                    user_q = st.text_area(
+                        "Your question:",
+                        placeholder="e.g., What are my key skills? Or: How can I improve my resume for a Data Scientist role?",
                         height=100,
-                        key="ai_chat_input"
+                        key="analytiq_q"
                     )
-                    
-                    col1, col2 = st.columns([1, 4])
-                    with col1:
-                        send_clicked = st.button("Send 💬", type="primary", use_container_width=True, key="send_ai_chat")
-                    with col2:
-                        if st.button("Clear Chat 🗑️", use_container_width=True, key="clear_ai_chat"):
-                            st.session_state.ai_chat_history = []
-                            st.rerun()
-                    
-                    if send_clicked and user_question.strip():
-                        # Create context from current analysis
-                        context = f"""
-                        Resume Analysis Context:
-                        - ATS Score: {results.get('ats_score', 0):.1f}/100
-                        - Role Match: {results.get('role_match_percentage', 0):.1f}%
-                        - Technical Skills: {len(results.get('technical_skills', []) or [])} found
-                        - Soft Skills: {len(results.get('soft_skills', []) or [])} found
-                        - Target Role: {detected_role}
-                        - Found Keywords: {', '.join(results.get('found_keywords', [])[:5])}
-                        - Missing Keywords: {', '.join(results.get('missing_keywords', [])[:5])}
-                        """
-                        
-                        response = analyzer.ai_assistant.get_response(user_question, context)
-                        st.session_state.ai_chat_history.append({"role": "user", "content": user_question})
-                        st.session_state.ai_chat_history.append({"role": "assistant", "content": response})
-                        st.rerun()
-
+                    ask = st.button("Ask AnalytiQ", type="primary", use_container_width=True, key="ask_analytiq")
+                    if ask and user_q.strip():
+                        resp = aq.ask(text or "", user_q)
+                        st.markdown("### Response")
+                        st.write(resp)
 
             except Exception as e:
                 st.error(f"❌ Error during analysis: {str(e)}")

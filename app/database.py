@@ -28,7 +28,13 @@ class User(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, index=True, nullable=False)
+    username = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=True)  # Null for Google Auth users
     name = Column(String(255), nullable=True)
+    role = Column(String(20), nullable=False, default='user')  # 'user' or 'admin'
+    auth_type = Column(String(20), nullable=False, default='email')  # 'email' or 'google'
+    is_verified = Column(Boolean, default=False)
+    google_id = Column(String(255), nullable=True, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_active = Column(Boolean, default=True)
@@ -186,6 +192,99 @@ def create_tables():
 def drop_tables():
     """Drop all database tables."""
     Base.metadata.drop_all(bind=engine)
+
+
+# Verification token model
+class VerificationToken(Base):
+    """Verification token model for email verification."""
+    
+    __tablename__ = "verification_tokens"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
+    token = Column(String(255), nullable=False, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+
+# Authentication and verification functions
+def create_user(db: Session, email: str, username: str, password: str = None, auth_type: str = 'email') -> User:
+    """Create a new user."""
+    from werkzeug.security import generate_password_hash
+    
+    user = User(
+        email=email,
+        username=username,
+        password_hash=generate_password_hash(password) if password else None,
+        auth_type=auth_type,
+        is_verified=auth_type == 'google'  # Google users are pre-verified
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
+    """Authenticate a user with username and password."""
+    from werkzeug.security import check_password_hash
+    
+    user = db.query(User).filter(
+        User.username == username,
+        User.auth_type == 'email',
+        User.role == 'user'
+    ).first()
+    
+    if user and check_password_hash(user.password_hash, password):
+        return user
+    return None
+
+
+def authenticate_admin(db: Session, username: str, password: str) -> Optional[User]:
+    """Authenticate an admin user."""
+    from werkzeug.security import check_password_hash
+    
+    admin = db.query(User).filter(
+        User.username == username,
+        User.role == 'admin'
+    ).first()
+    
+    if admin and check_password_hash(admin.password_hash, password):
+        return admin
+    return None
+
+
+def create_verification_token(db: Session, user_id: uuid.UUID) -> str:
+    """Create and store a verification token for a user."""
+    import secrets
+    from datetime import timedelta
+    
+    token = secrets.token_urlsafe(32)
+    verification_token = VerificationToken(
+        user_id=user_id,
+        token=token,
+        expires_at=datetime.utcnow() + timedelta(hours=24)
+    )
+    
+    db.add(verification_token)
+    db.commit()
+    return token
+
+
+def verify_email(db: Session, token: str) -> bool:
+    """Verify a user's email using a verification token."""
+    verification = db.query(VerificationToken).filter(
+        VerificationToken.token == token,
+        VerificationToken.expires_at > datetime.utcnow()
+    ).first()
+    
+    if verification:
+        user = db.query(User).filter(User.id == verification.user_id).first()
+        if user:
+            user.is_verified = True
+            db.commit()
+            return True
+    return False
 
 
 # Utility functions
